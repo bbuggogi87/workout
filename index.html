@@ -31,6 +31,9 @@
         textarea { resize: vertical; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        /* 시간 입력창 텍스트 잘림 및 시계 아이콘 겹침 방지 코드 */
+input[type="time"]::-webkit-datetime-edit-fields-wrapper { display: flex; padding-right: 8px; }
+input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter: invert(1); margin-left: auto; width: 18px; height: 18px; }
     </style>
 </head>
 <body class="antialiased min-h-screen custom-scrollbar relative">
