@@ -20,7 +20,15 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type="time"]::-webkit-calendar-picker-indicator, input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+         /* 기존 input[type="time"] 관련 스타일을 아래 코드로 덮어쓰기 하십시오. */
+        input[type="time"]::-webkit-calendar-picker-indicator, input[type="date"]::-webkit-calendar-picker-indicator { 
+            display: none; 
+            -webkit-appearance: none; 
+        }
+        input[type="time"] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
         select option { background-color: #1E293B; color: #F8FAFC; }
         optgroup { background-color: #0F172A; color: #94A3B8; font-weight: 900; }
         textarea { resize: vertical; }
