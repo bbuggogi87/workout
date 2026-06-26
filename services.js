@@ -25,7 +25,18 @@ export async function loadFromCloud() {
     const snap = await getDoc(docRef);
     if (snap.exists()) {
         const data = snap.data();
-        if (data.phases) state.phases = data.phases;
+        
+        // 구버전 DB 호환을 위한 자동 마이그레이션(데이터 이관) 로직
+        if (data.phaseData && !data.phases) {
+            let migrated = []; let idx = 1;
+            for (let key in data.phaseData) {
+                migrated.push({ id: 'p_' + idx++, title: data.phaseData[key].title || key, desc: data.phaseData[key].desc || '', meals: data.phaseData[key].meals || [] });
+            }
+            state.phases = migrated;
+            saveToCloud();
+        } else if (data.phases) {
+            state.phases = data.phases;
+        }
         if (data.customSupps) state.customSupps = data.customSupps;
         if (data.userInfo) state.userInfo = data.userInfo;
     }
@@ -56,9 +67,17 @@ export function importDataJSON(file, onSuccess, onError) {
     reader.onload = function(e) {
         try {
             const data = JSON.parse(e.target.result);
-            if(data.phases) state.phases = data.phases;
+            // 백업 파일 구버전 호환 마이그레이션 적용
+            if (data.phaseData && !data.phases) {
+                let migrated = []; let idx = 1;
+                for (let key in data.phaseData) { migrated.push({ id: 'p_' + idx++, title: data.phaseData[key].title || key, desc: data.phaseData[key].desc || '', meals: data.phaseData[key].meals || [] }); }
+                state.phases = migrated;
+            } else if(data.phases) {
+                state.phases = data.phases;
+            }
             if(data.customSupps) state.customSupps = data.customSupps;
             if(data.userInfo) state.userInfo = data.userInfo;
+            
             applyCustomSuppsToDB(); triggerSave(); if(onSuccess) onSuccess();
         } catch(err) { if(onError) onError(); }
     };
