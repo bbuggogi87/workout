@@ -14,11 +14,11 @@
         .active-tab { background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%); color: #FFFFFF; box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4); border-color: transparent !important; }
         .phase-btn-active { background-color: rgba(14, 165, 233, 0.2); border-color: rgba(14, 165, 233, 0.6) !important; color: #38BDF8; }
         .timeline-line-glow { box-shadow: 0 0 15px rgba(14, 165, 233, 0.6); transition: transform 0.2s; }
-        .timeline-line-glow:hover { transform: scale(1.1); }
         
-        /* 시간 텍스트와 시계 아이콘 분리 및 잘림 방지 CSS */
-        input[type="time"] { display: flex; align-items: center; justify-content: space-between; }
-        input[type="time"]::-webkit-calendar-picker-indicator { margin-left: auto; padding-left: 8px; filter: invert(1); cursor: pointer; }
+        /* 시간 텍스트 잘림 및 시계 아이콘 겹침 원천 차단 CSS */
+        input[type="time"] { display: inline-flex; align-items: center; justify-content: space-between; min-width: 135px; text-align: left; }
+        input[type="time"]::-webkit-datetime-edit-fields-wrapper { display: flex; padding-right: 5px; }
+        input[type="time"]::-webkit-calendar-picker-indicator { margin-left: auto; filter: invert(1); cursor: pointer; width: 22px; height: 22px; }
         
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); border-radius: 10px; }
@@ -31,9 +31,6 @@
         textarea { resize: vertical; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        /* 시간 입력창 텍스트 잘림 및 시계 아이콘 겹침 방지 코드 */
-input[type="time"]::-webkit-datetime-edit-fields-wrapper { display: flex; padding-right: 8px; }
-input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter: invert(1); margin-left: auto; width: 18px; height: 18px; }
     </style>
 </head>
 <body class="antialiased min-h-screen custom-scrollbar relative">
@@ -47,9 +44,7 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
 
 <div id="sticky-macro-bar" class="fixed top-0 left-0 w-full z-40 transform -translate-y-full opacity-0 transition-all duration-300 pointer-events-none">
     <div class="glass-panel mx-auto max-w-7xl px-4 py-3 flex justify-between items-center border-b border-sky-500/30 shadow-2xl bg-[#090D16]/95">
-        <div class="flex items-center gap-2 sm:gap-4">
-            <span class="text-sm font-black text-white hidden sm:inline pl-2 border-l-4 border-sky-500">DIET PLANNER</span>
-        </div>
+        <div class="flex items-center gap-2 sm:gap-4"><span class="text-sm font-black text-white hidden sm:inline pl-2 border-l-4 border-sky-500">DIET PLANNER</span></div>
         <div class="flex gap-3 sm:gap-6 text-xs font-bold uppercase items-center">
             <div class="flex items-center gap-1"><span class="text-slate-400 hidden sm:inline">KCAL</span> <span id="sticky-kcal" class="text-white text-base sm:text-lg font-black">0</span></div>
             <div class="w-px h-4 bg-slate-700 mx-1 sm:mx-0"></div>
@@ -62,36 +57,30 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
 
 <div id="edit-meal-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 backdrop-blur-sm px-4">
     <div class="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-md animate-fade-in border border-sky-500/40 shadow-2xl">
-        <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2" id="edit-meal-title">⚙️ 일정 편집 / 복제</h3>
+        <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2" id="edit-meal-title">⚙️ 일정 편집</h3>
         <div class="space-y-4">
-            <div class="flex justify-between items-center"><label class="text-sm font-bold text-slate-300">시간</label><input type="time" id="edit-meal-time" class="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-bold focus:border-sky-500 outline-none w-40"></div>
-            <div class="flex justify-between items-center"><label class="text-sm font-bold text-slate-300">라벨 (이름)</label><input type="text" id="edit-meal-label" class="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-bold focus:border-sky-500 outline-none w-40"></div>
+            <div class="flex justify-between items-center"><label class="text-sm font-bold text-slate-300">시간</label><input type="time" id="edit-meal-time" class="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-bold focus:border-sky-500 outline-none w-44"></div>
+            <div class="flex justify-between items-center"><label class="text-sm font-bold text-slate-300">라벨 (이름)</label><input type="text" id="edit-meal-label" class="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-bold focus:border-sky-500 outline-none w-44"></div>
             <div class="flex justify-between items-center"><label class="text-sm font-bold text-slate-300">테마 색상</label>
-                <select id="edit-meal-color" class="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-bold focus:border-sky-500 outline-none w-40">
+                <select id="edit-meal-color" class="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-bold focus:border-sky-500 outline-none w-44">
                     <option value="sky" class="text-sky-400">Sky Blue</option><option value="emerald" class="text-emerald-400">Emerald</option><option value="amber" class="text-amber-400">Amber</option><option value="rose" class="text-rose-400">Rose Red</option><option value="violet" class="text-violet-400">Violet</option><option value="slate" class="text-slate-400">Slate Gray</option>
                 </select>
             </div>
             <div><label class="block text-sm font-bold text-slate-300 mb-2">설명 메모</label><input type="text" id="edit-meal-explain" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-sky-500 outline-none"></div>
             <div><label class="block text-sm font-bold text-slate-300 mb-2">보충제 메모</label><textarea id="edit-meal-supps" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-sky-500 outline-none h-24 custom-scrollbar"></textarea></div>
         </div>
-        <div class="flex gap-3 mt-6">
-            <button onclick="window.closeEditMealModal()" class="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors">취소</button>
-            <button onclick="window.saveEditMealModal()" class="flex-1 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors">저장하기</button>
-        </div>
+        <div class="flex gap-3 mt-6"><button onclick="window.closeEditMealModal()" class="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors">취소</button><button onclick="window.saveEditMealModal()" class="flex-1 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors">저장하기</button></div>
     </div>
 </div>
 
 <div id="phase-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 backdrop-blur-sm px-4">
     <div class="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-md animate-fade-in border border-sky-500/40 shadow-2xl">
-        <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">📑 식단 탭 추가/수정</h3>
+        <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">📑 식단 탭 관리</h3>
         <div class="space-y-4">
             <div><label class="block text-sm font-bold text-slate-300 mb-2">탭 명칭</label><input type="text" id="phase-title" placeholder="예: 평일 기본 식단" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-bold focus:border-sky-500 outline-none"></div>
-            <div><label class="block text-sm font-bold text-slate-300 mb-2">탭 설명</label><input type="text" id="phase-desc" placeholder="예: 탄수화물 150g 베이스 유지" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-sky-500 outline-none"></div>
+            <div><label class="block text-sm font-bold text-slate-300 mb-2">탭 설명</label><input type="text" id="phase-desc" placeholder="예: 탄수화물 베이스 유지" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-sky-500 outline-none"></div>
         </div>
-        <div class="flex gap-3 mt-8">
-            <button onclick="window.closePhaseModal()" class="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors">취소</button>
-            <button onclick="window.savePhaseModal()" class="flex-1 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors">확인 및 저장</button>
-        </div>
+        <div class="flex gap-3 mt-8"><button onclick="window.closePhaseModal()" class="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors">취소</button><button onclick="window.savePhaseModal()" class="flex-1 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors">확인 및 저장</button></div>
     </div>
 </div>
 
@@ -110,14 +99,11 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
 
 <div id="macro-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 backdrop-blur-sm px-4">
     <div class="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-fade-in border border-sky-500/40 shadow-2xl custom-scrollbar">
-        <h3 class="text-xl font-bold text-white mb-2 flex items-center gap-2">⚙️ 보충제 Database 관리</h3>
-        <p class="text-sm text-slate-400 mb-6">다양한 보충제의 1스쿱 기준 성분을 추가/수정하세요.</p>
+        <h3 class="text-xl font-bold text-white mb-2 flex items-center gap-2">⚙️ 보충제 DB 관리</h3>
+        <p class="text-sm text-slate-400 mb-6">보충제의 1스쿱 기준 성분을 추가/수정하세요.</p>
         <div id="custom-supp-list" class="space-y-4 mb-4"></div>
         <button onclick="window.addCustomSuppForm()" class="w-full py-3 mb-6 border border-dashed border-slate-700 text-sky-400 text-base font-bold rounded-xl hover:bg-slate-800 transition-colors">+ 새 보충제 추가</button>
-        <div class="flex gap-3 mt-4 border-t border-slate-800 pt-5">
-            <button onclick="window.closeMacroModal()" class="flex-1 py-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors text-lg">취소</button>
-            <button onclick="window.saveMacroModal()" class="flex-1 py-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors text-lg">전체 저장</button>
-        </div>
+        <div class="flex gap-3 mt-4 border-t border-slate-800 pt-5"><button onclick="window.closeMacroModal()" class="flex-1 py-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors text-lg">취소</button><button onclick="window.saveMacroModal()" class="flex-1 py-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors text-lg">전체 저장</button></div>
     </div>
 </div>
 
@@ -127,8 +113,8 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
             <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div class="flex flex-wrap gap-2">
                     <span class="px-3 py-1 text-[11px] font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full">DIET & NUTRITION</span>
-                    <span id="badge-target-date" class="px-3 py-1 text-[11px] font-bold uppercase bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-full">Target Date: 7.18</span>
-                    <span id="cloud-status" class="px-3 py-1 text-[11px] font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 bg-slate-500 rounded-full"></span> 로컬 모드</span>
+                    <span id="badge-target-date" class="px-3 py-1 text-[11px] font-bold uppercase bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-full">Target Date: --.--</span>
+                    <span id="cloud-status" class="px-3 py-1 text-[11px] font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> 시스템 로드 중</span>
                 </div>
             </div>
             <h1 class="text-4xl sm:text-5xl font-black text-white">PREP MASTER <span class="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-amber-400">PRO</span></h1>
@@ -137,33 +123,21 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
                 <button onclick="window.exportData()" class="px-3 py-2 text-xs font-bold bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">💾 백업</button>
                 <button onclick="document.getElementById('import-file').click()" class="px-3 py-2 text-xs font-bold bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">📂 복원</button>
                 <button onclick="window.openProfileModal()" class="px-3 py-2 text-xs font-bold bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">👤 프로필 설정</button>
-                <button onclick="window.openMacroModal()" class="px-3 py-2 text-xs font-bold bg-sky-900/30 hover:bg-sky-800/50 text-sky-300 rounded-lg border border-sky-700/50 transition-colors">⚙️ 보충제 Database 관리</button>
+                <button onclick="window.openMacroModal()" class="px-3 py-2 text-xs font-bold bg-sky-900/30 hover:bg-sky-800/50 text-sky-300 rounded-lg border border-sky-700/50 transition-colors">⚙️ 보충제 DB 관리</button>
             </div>
         </div>
         <div class="flex w-full lg:w-auto justify-between sm:justify-start gap-2 sm:gap-4 glass-panel p-4 sm:p-5 rounded-2xl border-slate-800/50 shrink-0 cursor-pointer hover:border-sky-500/50" onclick="window.openProfileModal()">
-            <div class="text-center px-3 sm:px-5 py-1 border-r border-slate-800"><p class="text-slate-500 text-xs font-bold uppercase">Target BF</p><p class="text-2xl font-extrabold text-rose-400" id="prof-bf-display">4.0%</p></div>
-            <div class="text-center px-3 sm:px-5 py-1 border-r border-slate-800"><p class="text-slate-500 text-xs font-bold uppercase">Height</p><p class="text-2xl font-extrabold text-slate-200" id="prof-height-display">173cm</p></div>
-            <div class="text-center px-3 sm:px-5 py-1"><p class="text-slate-500 text-xs font-bold uppercase">Weight</p><p class="text-2xl font-extrabold text-slate-200" id="prof-weight-display">72.5kg</p></div>
+            <div class="text-center px-3 sm:px-5 py-1 border-r border-slate-800"><p class="text-slate-500 text-xs font-bold uppercase">Target BF</p><p class="text-2xl font-extrabold text-rose-400" id="prof-bf-display">-.-%</p></div>
+            <div class="text-center px-3 sm:px-5 py-1 border-r border-slate-800"><p class="text-slate-500 text-xs font-bold uppercase">Height</p><p class="text-2xl font-extrabold text-slate-200" id="prof-height-display">---cm</p></div>
+            <div class="text-center px-3 sm:px-5 py-1"><p class="text-slate-500 text-xs font-bold uppercase">Weight</p><p class="text-2xl font-extrabold text-slate-200" id="prof-weight-display">--.-kg</p></div>
         </div>
     </header>
 
     <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-slate-500 flex flex-col justify-center">
-            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">총 섭취 칼로리</p>
-            <h3 class="text-3xl sm:text-4xl font-black text-white"><span id="dash-kcal">0</span> <span class="text-sm text-slate-400">kcal</span></h3>
-        </div>
-        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-amber-500">
-            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">탄수화물 (Carbs)</p>
-            <div id="dash-carbs" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-amber-500">0g</span></div>
-        </div>
-        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-emerald-500">
-            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">단백질 (Protein)</p>
-            <div id="dash-protein" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-emerald-400">0g</span></div>
-        </div>
-        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-sky-400">
-            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">지방 (Fat)</p>
-            <div id="dash-fat" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-sky-400">0g</span></div>
-        </div>
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-slate-500 flex flex-col justify-center"><p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">총 섭취 칼로리</p><h3 class="text-3xl sm:text-4xl font-black text-white"><span id="dash-kcal">0</span> <span class="text-sm text-slate-400">kcal</span></h3></div>
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-amber-500"><p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">탄수화물 (Carbs)</p><div id="dash-carbs" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-amber-500">0g</span></div></div>
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-emerald-500"><p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">단백질 (Protein)</p><div id="dash-protein" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-emerald-400">0g</span></div></div>
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-sky-400"><p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">지방 (Fat)</p><div id="dash-fat" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-sky-400">0g</span></div></div>
     </section>
 
     <div class="flex gap-2 mb-6 sm:mb-8 border-b border-slate-800 pb-4 overflow-x-auto no-scrollbar whitespace-nowrap">
@@ -176,17 +150,17 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
         <div id="phase-tabs-container" class="flex gap-2 p-2 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar whitespace-nowrap shadow-inner"></div>
         <div class="flex flex-wrap items-center gap-2 mb-4 px-1 pb-4 border-b border-slate-800/50">
             <button onclick="window.openPhaseModal(true)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-slate-700 transition-colors">+ 새 탭 추가</button>
-            <button onclick="window.openPhaseModal(false)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-slate-700 transition-colors">✏️ 탭 이름 수정</button>
+            <button onclick="window.openPhaseModal(false)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-slate-700 transition-colors">✏️ 탭 수정</button>
             <button onclick="window.copyPhase()" class="px-3 py-1.5 bg-sky-900/30 hover:bg-sky-800/50 text-sky-300 text-xs font-bold rounded border border-sky-700/50 transition-colors">📋 식단 세트 복사</button>
-            <button onclick="window.pastePhase()" class="px-3 py-1.5 bg-amber-900/30 hover:bg-amber-800/50 text-amber-300 text-xs font-bold rounded border border-amber-700/50 transition-colors">📥 붙여넣기</button>
+            <button onclick="window.pastePhase()" class="px-3 py-1.5 bg-amber-900/30 hover:bg-amber-800/50 text-amber-300 text-xs font-bold rounded border border-amber-700/50 transition-colors">📥 덮어쓰기 붙여넣기</button>
             <button onclick="window.deletePhase()" class="px-3 py-1.5 bg-rose-900/30 hover:bg-rose-800/50 text-rose-300 text-xs font-bold rounded border border-rose-700/50 transition-colors ml-auto">🗑️ 현재 탭 삭제</button>
         </div>
         <p id="phase-description" class="text-sm sm:text-base text-sky-300 font-medium px-2 mb-4"></p>
+        
         <div id="timeline-container" class="relative pl-6 sm:pl-12 border-l-2 border-slate-800/80 space-y-6 mt-4 pb-24"></div>
+        
         <div class="pl-6 sm:pl-12 mt-6">
-            <button onclick="window.openEditMealModal(null, false)" class="w-full py-5 border-2 border-dashed border-slate-700 hover:border-sky-500/50 text-slate-400 hover:text-sky-400 rounded-2xl font-bold transition-colors text-lg">
-                + 새로운 일정 추가
-            </button>
+            <button onclick="window.openEditMealModal(null, false)" class="w-full py-5 border-2 border-dashed border-slate-700 hover:border-sky-500/50 text-slate-400 hover:text-sky-400 rounded-2xl font-bold transition-colors text-lg">+ 새로운 일정 추가</button>
         </div>
     </div>
 
@@ -233,18 +207,9 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
             <div class="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800">
                 <h3 class="text-base font-bold text-slate-200 mb-6 flex items-center gap-2">🔎 영양소별 제공 출처 분석</h3>
                 <div class="space-y-6 overflow-y-auto max-h-[400px] custom-scrollbar pr-2">
-                    <div>
-                        <div class="flex justify-between text-sm mb-2"><span class="font-bold text-amber-500">탄수화물 (Carbs)</span><span class="text-slate-400 font-bold" id="src-total-c">0g (0%)</span></div>
-                        <div id="src-list-c" class="space-y-3"></div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-sm mb-2"><span class="font-bold text-emerald-500">단백질 (Protein)</span><span class="text-slate-400 font-bold" id="src-total-p">0g (0%)</span></div>
-                        <div id="src-list-p" class="space-y-3"></div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-sm mb-2"><span class="font-bold text-sky-500">지방 (Fat)</span><span class="text-slate-400 font-bold" id="src-total-f">0g (0%)</span></div>
-                        <div id="src-list-f" class="space-y-3"></div>
-                    </div>
+                    <div><div class="flex justify-between text-sm mb-2"><span class="font-bold text-amber-500">탄수화물 (Carbs)</span><span class="text-slate-400 font-bold" id="src-total-c">0g (0%)</span></div><div id="src-list-c" class="space-y-3"></div></div>
+                    <div><div class="flex justify-between text-sm mb-2"><span class="font-bold text-emerald-500">단백질 (Protein)</span><span class="text-slate-400 font-bold" id="src-total-p">0g (0%)</span></div><div id="src-list-p" class="space-y-3"></div></div>
+                    <div><div class="flex justify-between text-sm mb-2"><span class="font-bold text-sky-500">지방 (Fat)</span><span class="text-slate-400 font-bold" id="src-total-f">0g (0%)</span></div><div id="src-list-f" class="space-y-3"></div></div>
                 </div>
             </div>
         </div>
@@ -255,7 +220,10 @@ input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter:
     <p>제공되는 대사량 수치 등은 일반 통계 기준 근사치이므로 정확하지 않을 수 있기 때문에 확인이 필요합니다.</p>
 </footer>
 
-<script type="module" src="app.js"></script>
+<script src="constants.js"></script>
+<script src="store.js"></script>
+<script src="services.js"></script>
+<script src="app.js"></script>
+
 </body>
 </html>
-
