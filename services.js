@@ -5,15 +5,24 @@ import { state, applyCustomSuppsToDB } from './store.js';
 
 let saveTimeout = null;
 
-export function saveToLocal() {
-    localStorage.setItem('prep_master_local_data', JSON.stringify({ phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo }));
+// [핵심] 기존 DB 살리기: 구버전의 phaseData 객체를 신버전의 phases 배열로 완벽하게 자동 이관하는 함수
+export function migrateData(data) {
+    if (data.phaseData && !data.phases) {
+        let migrated = []; let idx = 1;
+        for (let key in data.phaseData) { migrated.push({ id: 'p_' + idx++, title: data.phaseData[key].title || key, desc: data.phaseData[key].desc || '', meals: data.phaseData[key].meals || [] }); }
+        data.phases = migrated;
+    }
+    return data;
 }
+
+export function saveToLocal() { localStorage.setItem('prep_master_local_data', JSON.stringify({ phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo })); }
 
 export function loadFromLocal() {
     const local = localStorage.getItem('prep_master_local_data');
     if (local) {
         try {
-            const parsed = JSON.parse(local);
+            let parsed = JSON.parse(local);
+            parsed = migrateData(parsed); // 로컬 저장소에서도 마이그레이션 적용 보장
             if (parsed.phases) state.phases = parsed.phases;
             if (parsed.customSupps) state.customSupps = parsed.customSupps;
             if (parsed.userInfo) state.userInfo = parsed.userInfo;
@@ -24,7 +33,7 @@ export function loadFromLocal() {
 }
 
 export async function initializeFirebase(onInitComplete) {
-    loadFromLocal(); // 구동 지연 차단을 위해 로컬 캐시 즉시 화면 로드
+    loadFromLocal(); // 구동 지연 방지를 위해 즉시 화면 로드
     try {
         const cfg = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null;
         if (!cfg) { onInitComplete(false); return; }
@@ -37,15 +46,9 @@ export async function initializeFirebase(onInitComplete) {
                 state.userId = user.uid;
                 const snap = await getDoc(doc(state.db, 'artifacts', state.appId, 'users', state.userId, 'prepData', 'userData'));
                 if (snap.exists()) {
-                    const data = snap.data();
-                    
-                    // 구버전 및 백업본 동적 마이그레이션 통합 예외 처리
-                    if (data.phaseData && !data.phases) {
-                        let migrated = []; let idx = 1;
-                        for (let key in data.phaseData) { migrated.push({ id: 'p_' + idx++, title: data.phaseData[key].title || key, desc: data.phaseData[key].desc || '', meals: data.phaseData[key].meals || [] }); }
-                        state.phases = migrated;
-                    } else if (data.phases) { state.phases = data.phases; }
-                    
+                    let data = snap.data();
+                    data = migrateData(data); // 클라우드 DB에서도 완벽한 자동 이관 보장
+                    if (data.phases) state.phases = data.phases;
                     if (data.customSupps) state.customSupps = data.customSupps;
                     if (data.userInfo) state.userInfo = data.userInfo;
                     saveToLocal();
@@ -57,8 +60,7 @@ export async function initializeFirebase(onInitComplete) {
 }
 
 export async function saveToCloud() {
-    saveToLocal();
-    if (!state.userId || !state.db) return;
+    saveToLocal(); if (!state.userId || !state.db) return;
     try { await setDoc(doc(state.db, 'artifacts', state.appId, 'users', state.userId, 'prepData', 'userData'), { phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo }, { merge: true }); } catch(e) {}
 }
 
@@ -79,12 +81,9 @@ export function importDataJSON(file, onSuccess, onError) {
     if (!file) return; const reader = new FileReader();
     reader.onload = function(e) {
         try {
-            const data = JSON.parse(e.target.result);
-            if (data.phaseData && !data.phases) {
-                let migrated = []; let idx = 1;
-                for (let key in data.phaseData) { migrated.push({ id: 'p_' + idx++, title: data.phaseData[key].title || key, desc: data.phaseData[key].desc || '', meals: data.phaseData[key].meals || [] }); }
-                state.phases = migrated;
-            } else if(data.phases) { state.phases = data.phases; }
+            let data = JSON.parse(e.target.result);
+            data = migrateData(data); // 파일 복원 시에도 자동 이관 보장
+            if(data.phases) state.phases = data.phases;
             if(data.customSupps) state.customSupps = data.customSupps; if(data.userInfo) state.userInfo = data.userInfo;
             applyCustomSuppsToDB(); saveToLocal(); saveToCloud(); if(onSuccess) onSuccess();
         } catch(err) { if(onError) onError(); }
