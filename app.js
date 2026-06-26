@@ -11,6 +11,7 @@ export function showToast(msg) {
 export function finishInit() { 
     document.getElementById('prof-weight-display').innerText = state.userInfo.weight + 'kg'; 
     document.getElementById('prof-bf-display').innerText = state.userInfo.targetBF + '%';
+    document.getElementById('prof-height-display').innerText = state.userInfo.height + 'cm'; // <-- 이 줄을 추가합니다.
     if(state.userInfo.targetDate) { document.getElementById('badge-target-date').innerText = `Target Date: ${state.userInfo.targetDate.substring(5).replace('-','.')}`; }
     applyCustomSuppsToDB(); initCalcDropdowns();
     if(state.phases.length > 0) loadPhase(state.phases[0].id); 
