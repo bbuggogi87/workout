@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PREP MASTER PRO - Diet & Nutrition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Pretendard:wght@300;400;500;600;700;800;900&display=swap');
+        
+        body { 
+            font-family: 'Pretendard', 'Inter', sans-serif; 
+            background-color: #090D16; 
+            color: #F8FAFC; 
+            -webkit-tap-highlight-color: transparent; 
+        }
+        .glass-panel { 
+            background: rgba(15, 23, 42, 0.65); 
+            backdrop-filter: blur(16px); 
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); 
+        }
+        .active-tab { 
+            background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%); 
+            color: #FFFFFF; 
+            box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4); 
+            border-color: transparent !important; 
+        }
+        .phase-btn-active { 
+            background-color: rgba(14, 165, 233, 0.2); 
+            border-color: rgba(14, 165, 233, 0.6) !important; 
+            color: #38BDF8; 
+        }
+        .timeline-line-glow { 
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.6); 
+            cursor: pointer; 
+            transition: transform 0.2s; 
+        }
+        .timeline-line-glow:hover { transform: scale(1.2); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(14, 165, 233, 0.3); border-radius: 10px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="time"]::-webkit-calendar-picker-indicator, input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        select option { background-color: #1E293B; color: #F8FAFC; }
+        optgroup { background-color: #0F172A; color: #94A3B8; font-weight: 900; }
+        textarea { resize: vertical; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="antialiased min-h-screen custom-scrollbar relative">
+
+<div id="sticky-macro-bar" class="fixed top-0 left-0 w-full z-40 transform -translate-y-full opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="glass-panel mx-auto max-w-7xl px-4 py-3 flex justify-between items-center border-b border-sky-500/30 shadow-2xl bg-[#090D16]/95">
+        <div class="flex items-center gap-2 sm:gap-4">
+            <span class="text-sm font-black text-white hidden sm:inline pl-2 border-l-4 border-sky-500">DIET PLANNER</span>
+        </div>
+        <div class="flex gap-3 sm:gap-6 text-xs font-bold uppercase items-center">
+            <div class="flex items-center gap-1"><span class="text-slate-400 hidden sm:inline">KCAL</span> <span id="sticky-kcal" class="text-white text-base sm:text-lg font-black">0</span></div>
+            <div class="w-px h-4 bg-slate-700 mx-1 sm:mx-0"></div>
+            <div class="flex items-center gap-1"><span class="text-amber-500">C</span> <span id="sticky-carbs" class="text-amber-400 text-sm sm:text-base font-black">0g</span></div>
+            <div class="flex items-center gap-1"><span class="text-emerald-500">P</span> <span id="sticky-protein" class="text-emerald-400 text-sm sm:text-base font-black">0g</span></div>
+            <div class="flex items-center gap-1"><span class="text-sky-500">F</span> <span id="sticky-fat" class="text-sky-400 text-sm sm:text-base font-black">0g</span></div>
+        </div>
+    </div>
+</div>
+
+<div id="add-meal-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+    <div class="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-md animate-fade-in border border-sky-500/40 shadow-2xl">
+        <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">➕ 새로운 일정 추가</h3>
+        <div class="space-y-5">
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-slate-300">시간</label><input type="time" id="new-meal-time" class="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-bold focus:border-sky-500 outline-none w-36" value="12:00"></div>
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-slate-300">종류</label>
+                <select id="new-meal-type" class="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-bold focus:border-sky-500 outline-none w-36">
+                    <option value="meal">🍽️ 식사</option>
+                    <option value="workout">🏋️ 훈련</option>
+                    <option value="supp">💊 영양제</option>
+                </select>
+            </div>
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-slate-300">라벨 (이름)</label><input type="text" id="new-meal-label" placeholder="예: 식사 1" class="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-bold focus:border-sky-500 outline-none w-36"></div>
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-slate-300">테마 색상</label>
+                <select id="new-meal-color" class="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-bold focus:border-sky-500 outline-none w-36">
+                    <option value="sky" class="text-sky-400">Sky Blue</option><option value="emerald" class="text-emerald-400">Emerald</option><option value="amber" class="text-amber-400">Amber</option><option value="rose" class="text-rose-400">Rose Red</option><option value="violet" class="text-violet-400">Violet</option><option value="slate" class="text-slate-400">Slate Gray</option>
+                </select>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-8"><button onclick="window.closeAddMealModal()" class="flex-1 py-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors text-lg">취소</button><button onclick="window.confirmAddMeal()" class="flex-1 py-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors text-lg">추가하기</button></div>
+    </div>
+</div>
+
+<div id="profile-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+    <div class="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-md animate-fade-in border border-sky-500/40 shadow-2xl">
+        <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">👤 내 프로필 설정</h3>
+        <div class="space-y-5">
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-slate-300">현재 체중</label><div class="flex items-center gap-2"><input type="number" step="0.1" id="mod-weight-user" class="w-24 bg-slate-900 border border-slate-700 rounded-lg p-3 text-right text-white font-bold focus:border-sky-500 outline-none"><span class="text-sm text-slate-400 w-4">kg</span></div></div>
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-slate-300">신장 (키)</label><div class="flex items-center gap-2"><input type="number" id="mod-height" class="w-24 bg-slate-900 border border-slate-700 rounded-lg p-3 text-right text-white font-bold focus:border-sky-500 outline-none"><span class="text-sm text-slate-400 w-4">cm</span></div></div>
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-rose-400">목표 체지방</label><div class="flex items-center gap-2"><input type="number" step="0.1" id="mod-bf" class="w-24 bg-slate-900 border border-slate-700 rounded-lg p-3 text-right text-rose-400 font-bold focus:border-rose-500 outline-none"><span class="text-sm text-slate-400 w-4">%</span></div></div>
+            <div class="flex justify-between items-center"><label class="text-base font-bold text-sky-400">목표 날짜</label><input type="date" id="mod-date" class="bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-bold focus:border-sky-500 outline-none"></div>
+        </div>
+        <div class="flex gap-3 mt-8"><button onclick="window.closeProfileModal()" class="flex-1 py-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors text-lg">취소</button><button onclick="window.saveProfileModal()" class="flex-1 py-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors text-lg">저장</button></div>
+    </div>
+</div>
+
+<div id="macro-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+    <div class="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-fade-in border border-sky-500/40 shadow-2xl custom-scrollbar">
+        <h3 class="text-xl font-bold text-white mb-2 flex items-center gap-2">⚙️ 보충제 성분 커스텀 관리</h3>
+        <p class="text-sm text-slate-400 mb-6">다양한 보충제(프로틴, BCAA 등)의 1스쿱 기준 성분을 추가/수정하세요.</p>
+        
+        <div id="custom-supp-list" class="space-y-4 mb-4"></div>
+
+        <button onclick="window.addCustomSuppForm()" class="w-full py-3 mb-6 border border-dashed border-slate-700 text-sky-400 text-base font-bold rounded-xl hover:bg-slate-800 transition-colors">+ 새 보충제 추가</button>
+
+        <div class="flex gap-3 mt-4 border-t border-slate-800 pt-5">
+            <button onclick="window.closeMacroModal()" class="flex-1 py-4 rounded-xl border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-colors text-lg">취소</button>
+            <button onclick="window.saveMacroModal()" class="flex-1 py-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-colors text-lg">전체 저장</button>
+        </div>
+    </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 min-h-[90vh]">
+    <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6 border-b border-slate-800/60 pb-6">
+        <div class="flex-1 w-full">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div class="flex flex-wrap gap-2">
+                    <span class="px-3 py-1 text-[11px] font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full">DIET & NUTRITION</span>
+                    <span id="badge-target-date" class="px-3 py-1 text-[11px] font-bold uppercase bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-full">Target Date: 7.18</span>
+                    <span id="cloud-status" class="px-3 py-1 text-[11px] font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 bg-slate-500 rounded-full"></span> 로컬 모드</span>
+                </div>
+                <a href="calendar.html" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors border border-slate-700">🗓️ 운동 캘린더 이동</a>
+            </div>
+            <h1 class="text-4xl sm:text-5xl font-black text-white">PREP MASTER <span class="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-amber-400">PRO</span></h1>
+            
+            <div class="flex flex-wrap gap-2 mt-4">
+                <input type="file" id="import-file" accept=".json" style="display:none;" onchange="window.importData(event)">
+                <button onclick="window.exportData()" class="px-4 py-2.5 text-xs sm:text-sm font-bold bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">💾 식단 백업</button>
+                <button onclick="document.getElementById('import-file').click()" class="px-4 py-2.5 text-xs sm:text-sm font-bold bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">📂 식단 복원</button>
+                <button onclick="window.openProfileModal()" class="px-4 py-2.5 text-xs sm:text-sm font-bold bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">👤 프로필 수정</button>
+                <button onclick="window.openMacroModal()" class="px-4 py-2.5 text-xs sm:text-sm font-bold bg-sky-900/30 hover:bg-sky-800/50 text-sky-300 rounded-lg border border-sky-700/50 transition-colors">⚙️ 보충제 DB 관리</button>
+            </div>
+        </div>
+        <div class="flex w-full lg:w-auto justify-between sm:justify-start gap-2 sm:gap-4 glass-panel p-4 sm:p-5 rounded-2xl border-slate-800/50 shrink-0 cursor-pointer hover:border-sky-500/50" onclick="window.openProfileModal()">
+            <div class="text-center px-3 sm:px-5 py-1 border-r border-slate-800"><p class="text-slate-500 text-xs font-bold uppercase">Target BF</p><p class="text-2xl font-extrabold text-rose-400" id="prof-bf-display">4.0%</p></div>
+            <div class="text-center px-3 sm:px-5 py-1 border-r border-slate-800"><p class="text-slate-500 text-xs font-bold uppercase">Height</p><p class="text-2xl font-extrabold text-slate-200" id="prof-height-display">173cm</p></div>
+            <div class="text-center px-3 sm:px-5 py-1"><p class="text-slate-500 text-xs font-bold uppercase">Weight</p><p class="text-2xl font-extrabold text-slate-200" id="prof-weight-display">72.5kg</p></div>
+        </div>
+    </header>
+
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-slate-500 flex flex-col justify-center">
+            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">총 섭취 칼로리</p>
+            <h3 class="text-3xl sm:text-4xl font-black text-white"><span id="dash-kcal">0</span> <span class="text-sm text-slate-400">kcal</span></h3>
+        </div>
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-amber-500">
+            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">탄수화물 (Carbs)</p>
+            <div id="dash-carbs" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-amber-500">0g</span></div>
+        </div>
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-emerald-500">
+            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">단백질 (Protein)</p>
+            <div id="dash-protein" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-emerald-400">0g</span></div>
+        </div>
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border-l-4 border-sky-400">
+            <p class="text-slate-400 text-xs sm:text-sm font-bold uppercase mb-1">지방 (Fat)</p>
+            <div id="dash-fat" class="flex items-baseline gap-1"><span class="text-3xl sm:text-4xl font-black text-sky-400">0g</span></div>
+        </div>
+    </section>
+
+    <div class="flex gap-2 mb-6 sm:mb-8 border-b border-slate-800 pb-4 overflow-x-auto no-scrollbar whitespace-nowrap">
+        <button onclick="window.switchMainTab('tab-timeline')" id="btn-tab-timeline" class="px-5 py-3 rounded-xl text-base font-bold active-tab shrink-0">⏱️ 식단 플래너</button>
+        <button onclick="window.switchMainTab('tab-calculator')" id="btn-tab-calculator" class="px-5 py-3 rounded-xl text-base font-bold border border-slate-800 text-slate-400 hover:text-white shrink-0">🔄 스마트 변환기</button>
+        <button onclick="window.switchMainTab('tab-analysis')" id="btn-tab-analysis" class="px-5 py-3 rounded-xl text-base font-bold border border-slate-800 text-slate-400 hover:text-white shrink-0">🧬 영양성분 입체분석</button>
+    </div>
+
+    <div id="tab-timeline" class="tab-content block space-y-6 animate-fade-in">
+        <div class="flex gap-2 p-2 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto no-scrollbar whitespace-nowrap shadow-inner">
+            <button onclick="window.loadPhase('D-4')" id="btn-phase-D-4" class="px-5 py-3 rounded-lg text-base font-bold phase-btn-active shrink-0">기본 베이스 식단</button>
+            <button onclick="window.loadPhase('D-1')" id="btn-phase-D-1" class="px-5 py-3 rounded-lg text-base font-bold text-slate-400 hover:bg-slate-800 shrink-0">수분 조절 & 밴딩</button>
+            <button onclick="window.loadPhase('D-DAY')" id="btn-phase-D-DAY" class="px-5 py-3 rounded-lg text-base font-bold text-slate-400 hover:bg-slate-800 shrink-0">D-Day 카보로딩</button>
+        </div>
+        <p id="phase-description" class="text-base text-sky-300 font-medium px-2 pb-4 border-b border-slate-800/50"></p>
+        <div id="timeline-container" class="relative pl-6 sm:pl-12 border-l-2 border-slate-800/80 space-y-6 mt-6"></div>
+        <div class="pl-6 sm:pl-12 mt-6">
+            <button onclick="window.openAddMealModal()" class="w-full py-5 border-2 border-dashed border-slate-700 hover:border-sky-500/50 text-slate-400 hover:text-sky-400 rounded-2xl font-bold transition-colors text-lg">
+                + 새로운 일정 추가
+            </button>
+        </div>
+    </div>
+
+    <div id="tab-calculator" class="tab-content hidden space-y-6 animate-fade-in">
+        <div class="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800">
+            <h2 class="text-xl sm:text-2xl font-black text-white flex items-center gap-2 mb-2"><span class="w-2 h-6 bg-sky-500 rounded-full"></span> 스마트 매크로 변환기</h2>
+            <p class="text-slate-400 text-base mb-6 break-keep">섭취하고자 하는 기준 식품과 중량을 입력하면, 동일한 카테고리 내 모든 대체 식품의 <span class="text-amber-400 font-bold">등가 중량(g)</span>을 자동 계산합니다.</p>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+                    <label class="block text-base font-extrabold text-amber-500 mb-3">🌾 탄수화물 베이스</label>
+                    <div class="flex gap-2 mb-4">
+                        <select id="calc-carb-src" class="w-1/2 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-base font-bold text-white outline-none focus:border-amber-500" onchange="window.runSmartCalc('carb')"></select>
+                        <div class="w-1/2 flex items-center gap-2">
+                            <input type="number" id="calc-carb-amt" value="130" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-base font-bold text-white outline-none focus:border-amber-500" oninput="window.runSmartCalc('carb')"><span class="text-slate-400 text-sm font-bold">g</span>
+                        </div>
+                    </div>
+                    <div id="calc-carb-res" class="space-y-1 mt-4 border-t border-slate-800 pt-4 custom-scrollbar max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+
+                <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+                    <label class="block text-base font-extrabold text-emerald-500 mb-3">🥩 단백질 베이스</label>
+                    <div class="flex gap-2 mb-4">
+                        <select id="calc-pro-src" class="w-1/2 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-base font-bold text-white outline-none focus:border-emerald-500" onchange="window.runSmartCalc('pro')"></select>
+                        <div class="w-1/2 flex items-center gap-2">
+                            <input type="number" id="calc-pro-amt" value="150" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-base font-bold text-white outline-none focus:border-emerald-500" oninput="runSmartCalc('pro')"><span class="text-slate-400 text-sm font-bold">g</span>
+                        </div>
+                    </div>
+                    <div id="calc-pro-res" class="space-y-1 mt-4 border-t border-slate-800 pt-4 custom-scrollbar max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+
+                <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+                    <label class="block text-base font-extrabold text-sky-500 mb-3">🥑 지방 베이스</label>
+                    <div class="flex gap-2 mb-4">
+                        <select id="calc-fat-src" class="w-1/2 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-base font-bold text-white outline-none focus:border-sky-500" onchange="window.runSmartCalc('fat')"></select>
+                        <div class="w-1/2 flex items-center gap-2">
+                            <input type="number" id="calc-fat-amt" value="15" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-base font-bold text-white outline-none focus:border-sky-500" oninput="window.runSmartCalc('fat')"><span class="text-slate-400 text-sm font-bold">g</span>
+                        </div>
+                    </div>
+                    <div id="calc-fat-res" class="space-y-1 mt-4 border-t border-slate-800 pt-4 custom-scrollbar max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-analysis" class="tab-content hidden space-y-6 animate-fade-in">
+        <h2 class="text-lg sm:text-xl font-black text-white flex items-center gap-2"><span class="w-2 h-5 bg-amber-500 rounded-full"></span> 영양소 입체 분석 리포트</h2>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800">
+                <h3 class="text-base font-bold text-slate-200 mb-6 text-center">전체 섭취 매크로 비중</h3>
+                <div class="relative w-full h-[300px] flex justify-center items-center"><canvas id="chart-pie-macros"></canvas></div>
+            </div>
+            
+            <div class="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800">
+                <h3 class="text-base font-bold text-slate-200 mb-6 flex items-center gap-2">🔎 영양소별 제공 출처 분석</h3>
+                
+                <div class="space-y-6 overflow-y-auto max-h-[400px] custom-scrollbar pr-2">
+                    <div>
+                        <div class="flex justify-between text-sm mb-2"><span class="font-bold text-amber-500">탄수화물 (Carbs)</span><span class="text-slate-400 font-bold" id="src-total-c">0g (0%)</span></div>
+                        <div id="src-list-c" class="space-y-3"></div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-2"><span class="font-bold text-emerald-500">단백질 (Protein)</span><span class="text-slate-400 font-bold" id="src-total-p">0g (0%)</span></div>
+                        <div id="src-list-p" class="space-y-3"></div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-2"><span class="font-bold text-sky-500">지방 (Fat)</span><span class="text-slate-400 font-bold" id="src-total-f">0g (0%)</span></div>
+                        <div id="src-list-f" class="space-y-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.PrepConstants = {
+    FOOD_DB: {
+        '백미':{c:0.28,p:0.027,f:0.003,k:1.3}, '현미밥':{c:0.32,p:0.03,f:0.01,k:1.5}, '감자':{c:0.20,p:0.02,f:0.001,k:0.86}, '고구마':{c:0.31,p:0.015,f:0.002,k:1.3}, '찐단호박':{c:0.10,p:0.01,f:0.0,k:0.45}, '오트밀':{c:0.66,p:0.13,f:0.06,k:3.8}, '바나나':{c:0.23,p:0.01,f:0.0,k:0.89}, '사과':{c:0.14,p:0.0,f:0.0,k:0.52}, '파스타(건면)':{c:0.75,p:0.13,f:0.01,k:3.7}, '베이글':{c:0.50,p:0.10,f:0.01,k:2.5}, '식빵':{c:0.49,p:0.09,f:0.04,k:2.7},
+        '닭가슴살':{c:0.0,p:0.23,f:0.012,k:1.1}, '닭다리살(껍질X)':{c:0.0,p:0.19,f:0.08,k:1.5}, '돼지안심':{c:0.0,p:0.26,f:0.03,k:1.4}, '소고기부채살':{c:0.0,p:0.21,f:0.11,k:1.9}, '소고기우둔살':{c:0.0,p:0.22,f:0.04,k:1.3}, '연어':{c:0.0,p:0.20,f:0.13,k:2.0}, '틸라피아':{c:0.0,p:0.20,f:0.017,k:0.98}, '오징어':{c:0.03,p:0.16,f:0.01,k:0.9}, '전란':{c:0.007,p:0.125,f:0.095,k:1.43}, '난백액':{c:0.01,p:0.10,f:0.0,k:0.45},
+        '아몬드':{c:0.216,p:0.211,f:0.499,k:5.79}, '호두':{c:0.13,p:0.15,f:0.65,k:6.5}, '피넛버터(무당)':{c:0.20,p:0.25,f:0.50,k:5.9}, '아보카도':{c:0.08,p:0.02,f:0.15,k:1.6}, '올리브오일':{c:0.0,p:0.0,f:1.0,k:8.8}, '계란노른자':{c:0.03,p:0.16,f:0.27,k:3.2},
+        '브로콜리':{c:0.07,p:0.03,f:0.0,k:0.34}, '아스파라거스':{c:0.04,p:0.02,f:0.0,k:0.20}, '양배추':{c:0.06,p:0.01,f:0.0,k:0.25}, '방울토마토':{c:0.04,p:0.01,f:0.0,k:0.18}, '야채(혼합)':{c:0.03,p:0.01,f:0.0,k:0.2}, '블루베리':{c:0.14,p:0.007,f:0.003,k:0.57}
+    },
+    FOOD_CATEGORIES: {
+        '탄수화물':['백미','현미밥','고구마','감자','찐단호박','오트밀','바나나','사과','파스타(건면)','베이글','식빵'],
+        '단백질':['닭가슴살','닭다리살(껍질X)','돼지안심','소고기부채살','소고기우둔살','연어','틸라피아','오징어','전란','난백액'],
+        '지방':['아몬드','호두','피넛버터(무당)','아보카도','올리브오일','계란노른자'],
+        '야채':['브로콜리','아스파라거스','양배추','방울토마토','야채(혼합)','블루베리'],
+        '보충제':[]
+    },
+    INITIAL_PHASE_DATA: {
+        'D-4': { 
+            title: 'D-4 주차', desc: '식단, 영양제, 훈련 일정을 자유롭게 배치하고 섭취 메모를 남겨보세요.', 
+            meals: [
+                { id: 'm1', time: '12:00', label: '식사 1 (첫 식사)', color: 'sky', explain: '', supps: '[보충제 패키지 A]\n• 멀티비타민 2캡슐\n• OptiMSM 1.5g\n• CoQ10 100mg\n• 오메가-3 1캡슐', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}, {name:'아몬드', amount:15}], isWorkout: false, isCollapsed: false },
+                { id: 'm2', time: '17:00', label: '식사 2 (1차 분할)', color: 'amber', explain: '', supps: '[보충제 패키지 B]\n• 멀티비타민 1캡슐\n• OptiMSM 1.5g', items: [{name:'감자', amount:115}, {name:'닭가슴살', amount:75}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}], isWorkout: false, isCollapsed: false },
+                { id: 'm3', time: '19:00', label: '식사 2 (2차 분할)', color: 'emerald', explain: '', supps: '보충제 없음\n(훈련 전 위장 부담 최소화 및 복압 확보)', items: [{name:'감자', amount:115}, {name:'닭가슴살', amount:75}], isWorkout: false, isCollapsed: false },
+                { id: 'm4', time: '21:00', label: '고강도 웨이트 훈련', color: 'rose', explain: '오후 메인 본 운동 세션 인트라 아웃 워크아웃', supps: '', items: [], isWorkout: true, isCollapsed: false },
+                { id: 'm5', time: '23:00', label: '훈련 직후 유산소', color: 'violet', explain: '체지방 4% 커팅 유산소 세션\n* 유산소 중 근손실 방지 완벽 방어', supps: '• EAA 1스쿱 (수분 500ml에 희석)', items: [], isWorkout: true, isCollapsed: false },
+                { id: 'm6', time: '23:40', label: '포스트 워크아웃', color: 'sky', explain: '골격근 동화 창 오픈 타이밍\n* 유산소 완전히 끝난 직후 섭취', supps: '• 크레아틴 6g', items: [{name:'단백질 보충제', amount:30}], isWorkout: false, isCollapsed: false },
+                { id: 'm7', time: '01:00', label: '식사 3 (새벽 식사)', color: 'amber', explain: '', supps: '보충제 절대 금지\n(B군 각성 작용으로 인한 수면 방해 차단)', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}], isWorkout: false, isCollapsed: false },
+                { id: 'm8', time: '03:00', label: '식사 4 (취침 전)', color: 'slate', explain: '', supps: '보충제 없음\n(깊은 수면 유도)', items: [{name:'블루베리', amount:100}, {name:'아몬드', amount:20}], isWorkout: false, isCollapsed: false }
+            ] 
+        },
+        'D-1': { title: 'D-1 주차', desc: '수분 조절 & 밴딩', meals: [] }, 
+        'D-DAY': { title: 'D-Day', desc: '로딩 & 당일 펌핑', meals: [] }
+    }
+};
+</script>
+
+<script>
+window.PrepStore = {
+    state: {
+        userInfo: { targetBF: '4.0', height: 173, weight: 72.5, targetDate: '2026-07-18' },
+        phaseData: JSON.parse(JSON.stringify(window.PrepConstants.INITIAL_PHASE_DATA)),
+        currentPhase: 'D-4',
+        customSupps: [ { id: 1, name: '단백질 보충제', weight: 30, kcal: 120, carbs: 3, protein: 24, fat: 1.5 } ],
+        foodDB: JSON.parse(JSON.stringify(window.PrepConstants.FOOD_DB)),
+        foodCategories: JSON.parse(JSON.stringify(window.PrepConstants.FOOD_CATEGORIES)),
+        pieChartInstance: null,
+        userId: null,
+        db: null,
+        appId: typeof __app_id !== 'undefined' ? __app_id : 'prep-master-pro'
+    },
+    
+    applyCustomSuppsToDB: function() {
+        this.state.foodCategories['보충제'] = [];
+        this.state.customSupps.forEach(supp => {
+            if(supp.weight > 0) {
+                this.state.foodDB[supp.name] = { 
+                    c: supp.carbs/supp.weight, 
+                    p: supp.protein/supp.weight, 
+                    f: supp.fat/supp.weight, 
+                    k: supp.kcal/supp.weight 
+                };
+                this.state.foodCategories['보충제'].push(supp.name);
+            }
+        });
+    }
+};
+</script>
+<script>
+window.PrepApp = {
+    saveTimeout: null,
+
+    showToast: function(msg) { 
+        const t = document.getElementById('toast'); 
+        document.getElementById('toast-text').innerText = msg; 
+        t.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 pointer-events-auto shadow-2xl"; 
+        setTimeout(() => { t.className = "fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-none"; }, 2500); 
+    },
+
+    triggerSave: function() { 
+        if(this.saveTimeout) clearTimeout(this.saveTimeout); 
+        this.saveTimeout = setTimeout(() => { 
+            if(window.PrepServices && window.PrepServices.saveToCloud) window.PrepServices.saveToCloud(); 
+        }, 1000); 
+    },
+
+    finishInit: function() { 
+        document.getElementById('prof-weight-display').innerText = PrepStore.state.userInfo.weight + 'kg'; 
+        document.getElementById('prof-bf-display').innerText = PrepStore.state.userInfo.targetBF + '%';
+        if(PrepStore.state.userInfo.targetDate) { 
+            document.getElementById('badge-target-date').innerText = `Target Date: ${PrepStore.state.userInfo.targetDate.substring(5).replace('-','.')}`; 
+        }
+        PrepStore.applyCustomSuppsToDB();
+        this.initCalcDropdowns();
+        this.loadPhase('D-4'); 
+        this.runSmartCalc('carb'); this.runSmartCalc('pro'); this.runSmartCalc('fat');
+    },
+
+    cycleColor: function(mIdx) {
+        const colors = ['sky', 'emerald', 'amber', 'rose', 'violet', 'slate'];
+        const current = PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx].color || 'sky';
+        const next = colors[(colors.indexOf(current) + 1) % colors.length];
+        PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx].color = next;
+        this.triggerSave(); this.loadPhase(PrepStore.state.currentPhase);
+    },
+
+    toggleCollapse: function(mIdx) {
+        let meal = PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx];
+        meal.isCollapsed = !meal.isCollapsed;
+        this.loadPhase(PrepStore.state.currentPhase);
+    },
+
+    loadPhase: function(phaseKey) { 
+        PrepStore.state.currentPhase = phaseKey; 
+        ['D-4', 'D-1', 'D-DAY'].forEach(key => { 
+            document.getElementById('btn-phase-' + key).className = (key === phaseKey) ? "px-5 py-3 rounded-lg text-base font-bold phase-btn-active shrink-0" : "px-5 py-3 rounded-lg text-base font-bold text-slate-400 hover:bg-slate-800 shrink-0"; 
+        });
+        document.getElementById('phase-description').innerText = PrepStore.state.phaseData[phaseKey].desc;
+
+        const container = document.getElementById('timeline-container'); container.innerHTML = '';
+        PrepStore.state.phaseData[phaseKey].meals.forEach((meal, mIdx) => {
+            let itemsHtml = '';
+            if(!meal.items) meal.items = [];
+
+            meal.items.forEach((item, iIdx) => {
+                let opts = `<optgroup label="탄수화물">` + PrepStore.state.foodCategories['탄수화물'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
+                opts += `<optgroup label="단백질">` + PrepStore.state.foodCategories['단백질'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
+                opts += `<optgroup label="지방">` + PrepStore.state.foodCategories['지방'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
+                opts += `<optgroup label="야채">` + PrepStore.state.foodCategories['야채'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
+                opts += `<optgroup label="보충제">` + PrepStore.state.foodCategories['보충제'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
+                
+                itemsHtml += `
+                <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-slate-800 mb-2">
+                    <select onchange="PrepApp.updateItemName(${mIdx}, ${iIdx}, event.target.value)" class="bg-slate-800 text-slate-200 text-sm px-3 py-2 rounded-lg outline-none w-[140px] sm:w-[160px]">${opts}</select>
+                    <div class="flex items-center gap-2">
+                        <input type="number" oninput="PrepApp.updateItemAmount(${mIdx}, ${iIdx}, event.target.value)" class="w-16 sm:w-20 bg-slate-950 text-white text-right text-base px-3 py-2 rounded-lg focus:border-sky-500 outline-none" value="${item.amount || 0}">
+                        <span class="text-sm text-slate-400 font-bold">g</span>
+                        <button onclick="PrepApp.deleteItem(${mIdx}, ${iIdx})" class="text-slate-600 hover:text-rose-400 ml-2 px-2 text-lg">✕</button>
+                    </div>
+                </div>`;
+            });
+
+            container.innerHTML += `
+            <div class="relative transition-all duration-300 mb-6">
+                <div onclick="event.stopPropagation(); PrepApp.cycleColor(${mIdx})" class="absolute -left-[35px] sm:-left-[58px] top-3 w-5 h-5 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow" title="색상 변경"></div>
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                    <div class="flex justify-between items-center cursor-pointer" onclick="PrepApp.toggleCollapse(${mIdx})">
+                        <div class="flex items-center gap-2 sm:gap-4" onclick="event.stopPropagation()">
+                            <input type="time" onchange="PrepApp.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-xl sm:text-2xl outline-none w-auto min-w-[90px] sm:min-w-[110px] p-0 tracking-tighter">
+                            <input type="text" onchange="PrepApp.updateMealField(${mIdx}, 'label', event.target.value)" value="${meal.label}" class="px-2 py-1 text-sm sm:text-base font-bold uppercase bg-${meal.color}-500/10 text-${meal.color}-400 border border-${meal.color}-500/20 rounded-md outline-none w-[130px] sm:w-auto">
+                        </div>
+                        <div class="flex gap-2 items-center" onclick="event.stopPropagation()">
+                            <button onclick="PrepApp.duplicateMeal(${mIdx})" class="text-sm text-slate-500 hover:text-sky-400 transition-colors p-1" title="복제">📋</button>
+                            <button onclick="PrepApp.deleteMeal(${mIdx})" class="text-sm text-slate-500 hover:text-rose-400 transition-colors p-1" title="삭제">🗑️</button>
+                            <button onclick="PrepApp.toggleCollapse(${mIdx})" class="text-slate-400 hover:text-white ml-2 p-1 text-sm sm:text-base">${meal.isCollapsed ? '🔽' : '🔼'}</button>
+                        </div>
+                    </div>
+                    <div class="transition-all duration-300 overflow-hidden ${meal.isCollapsed ? 'max-h-0 opacity-0 m-0' : 'max-h-[3000px] opacity-100 mt-5'}">
+                        <input type="text" onchange="PrepApp.updateMealField(${mIdx}, 'explain', event.target.value)" value="${meal.explain || ''}" placeholder="스케줄 메모 (예: 오후 메인 본 운동 세션)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-base sm:text-lg text-white font-bold outline-none focus:border-sky-500 mb-3">
+                        <textarea onchange="PrepApp.updateMealField(${mIdx}, 'supps', event.target.value)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-sm sm:text-base text-slate-200 outline-none focus:border-sky-500 mb-3 min-h-[100px] custom-scrollbar" placeholder="보충제 섭취 프로토콜 및 상세 코칭 메모">${meal.supps || ''}</textarea>
+                        ${itemsHtml}
+                        <button onclick="PrepApp.addItem(${mIdx})" class="w-full py-3 border border-dashed border-slate-700 text-sm text-slate-400 hover:text-sky-400 font-bold mt-2 rounded-xl transition-colors">+ 식품 및 보충제 추가</button>
+                    </div>
+                </div>
+            </div>`;
+        });
+        this.calculateMacros();
+    },
+
+    duplicateMeal: function(mIdx) {
+        let clone = JSON.parse(JSON.stringify(PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx]));
+        clone.id = 'm' + Date.now();
+        PrepStore.state.phaseData[PrepStore.state.currentPhase].meals.push(clone);
+        PrepStore.state.phaseData[PrepStore.state.currentPhase].meals.sort((a,b) => a.time.localeCompare(b.time));
+        this.triggerSave(); this.loadPhase(PrepStore.state.currentPhase); this.showToast("일정이 복제되었습니다.");
+    },
+
+    updateMealField: function(mIdx, field, val) { PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx][field] = val; if(field==='time') PrepStore.state.phaseData[PrepStore.state.currentPhase].meals.sort((a,b) => a.time.localeCompare(b.time)); this.triggerSave(); this.loadPhase(PrepStore.state.currentPhase); },
+    updateItemName: function(mIdx, iIdx, val) { PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx].items[iIdx].name = val; this.triggerSave(); this.calculateMacros(); },
+    updateItemAmount: function(mIdx, iIdx, val) { PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx].items[iIdx].amount = parseFloat(val)||0; this.triggerSave(); this.calculateMacros(); },
+    deleteItem: function(mIdx, iIdx) { PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx].items.splice(iIdx, 1); this.triggerSave(); this.loadPhase(PrepStore.state.currentPhase); },
+    addItem: function(mIdx) { PrepStore.state.phaseData[PrepStore.state.currentPhase].meals[mIdx].items.push({name:'백미', amount:100}); this.triggerSave(); this.loadPhase(PrepStore.state.currentPhase); },
+    deleteMeal: function(mIdx) { if(confirm("이 일정을 삭제하시겠습니까?")) { PrepStore.state.phaseData[PrepStore.state.currentPhase].meals.splice(mIdx, 1); this.triggerSave(); this.loadPhase(PrepStore.state.currentPhase); } },
+
+    confirmAddMeal: function() {
+        const time = document.getElementById('new-meal-time').value;
+        const type = document.getElementById('new-meal-type').value; 
+        const label = document.getElementById('new-meal-label').value || (type==='workout'?'새 훈련':(type==='supp'?'새 영양제':'새 식사')); 
+        const color = document.getElementById('new-meal-color').value;
+        PrepStore.state.phaseData[PrepStore.state.currentPhase].meals.push({ id: 'm'+Date.now(), time: time, label: label, color: color, explain: '', items: [], isCollapsed: false }); 
+        PrepStore.state.phaseData[PrepStore.state.currentPhase].meals.sort((a,b) => a.time.localeCompare(b.time));
+        this.triggerSave(); document.getElementById('add-meal-modal').classList.add('hidden'); document.getElementById('add-meal-modal').classList.remove('flex'); this.loadPhase(PrepStore.state.currentPhase);
+    },
+
+    calculateMacros: function() {
+        let tC=0, tP=0, tF=0, tK=0; let cSrc={}, pSrc={}, fSrc={};
+        PrepStore.state.phaseData[PrepStore.state.currentPhase].meals.forEach(m => {
+            if(m.items) {
+                m.items.forEach(i => {
+                    const db = PrepStore.state.foodDB[i.name];
+                    if(db) { 
+                        let amt = i.amount || 0; let c=db.c*amt, p=db.p*amt, f=db.f*amt;
+                        tC+=c; tP+=p; tF+=f; tK+=db.k*amt; 
+                        if(c>0) cSrc[i.name] = (cSrc[i.name]||0) + c;
+                        if(p>0) pSrc[i.name] = (pSrc[i.name]||0) + p;
+                        if(f>0) fSrc[i.name] = (fSrc[i.name]||0) + f;
+                    }
+                });
+            }
+        });
+        
+        let cKcal = tC * 4, pKcal = tP * 4, fKcal = tF * 9;
+        let totCalc = cKcal + pKcal + fKcal;
+        let cPct = totCalc > 0 ? Math.round((cKcal / totCalc) * 100) : 0;
+        let pPct = totCalc > 0 ? Math.round((pKcal / totCalc) * 100) : 0;
+        let fPct = totCalc > 0 ? Math.round((fKcal / totCalc) * 100) : 0;
+
+        document.getElementById('dash-kcal').innerText = Math.round(tK).toLocaleString(); 
+        document.getElementById('dash-carbs').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-amber-500">${tC.toFixed(1)}g</span> <span class="text-sm sm:text-base text-amber-400/80 font-bold ml-1">(${cPct}%)</span>`;
+        document.getElementById('dash-protein').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-emerald-400">${tP.toFixed(1)}g</span> <span class="text-sm sm:text-base text-emerald-400/80 font-bold ml-1">(${pPct}%)</span>`;
+        document.getElementById('dash-fat').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-sky-400">${tF.toFixed(1)}g</span> <span class="text-sm sm:text-base text-sky-400/80 font-bold ml-1">(${fPct}%)</span>`;
+        
+        document.getElementById('sticky-kcal').innerText = Math.round(tK).toLocaleString(); 
+        document.getElementById('sticky-carbs').innerHTML = `${tC.toFixed(1)}g <span class="text-[10px] font-bold">(${cPct}%)</span>`; 
+        document.getElementById('sticky-protein').innerHTML = `${tP.toFixed(1)}g <span class="text-[10px] font-bold">(${pPct}%)</span>`; 
+        document.getElementById('sticky-fat').innerHTML = `${tF.toFixed(1)}g <span class="text-[10px] font-bold">(${fPct}%)</span>`;
+        
+        // 차트 렌더링 최적화: 탭이 보여질 때만 렌더링
+        if (!PrepStore.state.pieChartInstance && !document.getElementById('tab-analysis').classList.contains('hidden')) { 
+            PrepStore.state.pieChartInstance = new Chart(document.getElementById('chart-pie-macros').getContext('2d'), { 
+                type: 'doughnut', 
+                data: { labels: ['탄수화물', '단백질', '지방'], datasets: [{ data: [tC, tP, tF], backgroundColor: ['#F59E0B', '#10B981', '#0EA5E9'], borderWidth: 0 }] }, 
+                options: { 
+                    responsive: true, maintainAspectRatio: false, cutout: '72%', 
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { color: '#94A3B8', font: { size: 14 } } },
+                        tooltip: {
+                            titleFont: { size: 14 }, bodyFont: { size: 16, weight: 'bold' }, padding: 12,
+                            callbacks: {
+                                label: function(ctx) {
+                                    let val = ctx.raw || 0; let kcal = (ctx.label === '지방') ? val * 9 : val * 4;
+                                    let pct = totCalc > 0 ? Math.round((kcal/totCalc)*100) : 0;
+                                    return `${ctx.label}: ${val.toFixed(1)}g (${pct}%)`;
+                                }
+                            }
+                        }
+                    } 
+                } 
+            }); 
+        } else if (PrepStore.state.pieChartInstance) { 
+            PrepStore.state.pieChartInstance.data.datasets[0].data = [tC, tP, tF]; PrepStore.state.pieChartInstance.update(); 
+        }
+
+        this.renderAnalysisDetails(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, fSrc);
+    },
+
+    renderAnalysisDetails: function(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, fSrc) {
+        document.getElementById('src-total-c').innerText = `${tC.toFixed(1)}g (${cPct}%)`; document.getElementById('src-total-p').innerText = `${tP.toFixed(1)}g (${pPct}%)`; document.getElementById('src-total-f').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
+        const renderList = (srcObj, total, elId, colorCls) => {
+            let html = ''; let sorted = Object.entries(srcObj).sort((a,b)=>b[1]-a[1]);
+            sorted.forEach(([name, amt]) => {
+                let pct = total > 0 ? Math.round((amt/total)*100) : 0;
+                html += `<div class="mb-3"><div class="flex justify-between text-xs text-slate-300 mb-1"><span>${name}</span><span>${amt.toFixed(1)}g (${pct}%)</span></div><div class="w-full bg-slate-800 rounded-full h-2"><div class="bg-${colorCls} h-2 rounded-full" style="width: ${pct}%"></div></div></div>`;
+            });
+            document.getElementById(elId).innerHTML = html;
+        };
+        renderList(cSrc, tC, 'src-list-c', 'amber-500'); renderList(pSrc, tP, 'src-list-p', 'emerald-500'); renderList(fSrc, tF, 'src-list-f', 'sky-500');
+    },
+
+    initCalcDropdowns: function() {
+        const cDrop = document.getElementById('calc-carb-src'); const pDrop = document.getElementById('calc-pro-src'); const fDrop = document.getElementById('calc-fat-src');
+        cDrop.innerHTML = ''; pDrop.innerHTML = ''; fDrop.innerHTML = ''; 
+        PrepStore.state.foodCategories['탄수화물'].forEach(f => cDrop.innerHTML += `<option value="${f}">${f}</option>`);
+        PrepStore.state.foodCategories['단백질'].forEach(f => pDrop.innerHTML += `<option value="${f}">${f}</option>`);
+        PrepStore.state.foodCategories['지방'].forEach(f => { if(PrepStore.state.foodDB[f].f > 0.1) fDrop.innerHTML += `<option value="${f}">${f}</option>`; });
+        cDrop.value = '백미'; pDrop.value = '닭가슴살'; fDrop.value = '아몬드';
+    },
+
+    runSmartCalc: function(type) {
+        let src = document.getElementById(`calc-${type}-src`).value; let amt = parseFloat(document.getElementById(`calc-${type}-amt`).value) || 0;
+        let targetMacro = 0; let resHtml = '';
+        if(type === 'carb') {
+            targetMacro = amt * PrepStore.state.foodDB[src].c;
+            PrepStore.state.foodCategories['탄수화물'].forEach(f => { if(f !== src && PrepStore.state.foodDB[f].c > 0) { resHtml += `<div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0 text-base"><span class="text-slate-400">${f}</span><span class="text-white font-bold">${Math.round(targetMacro/PrepStore.state.foodDB[f].c)}g</span></div>`; } });
+        } else if(type === 'pro') {
+            targetMacro = amt * PrepStore.state.foodDB[src].p;
+            PrepStore.state.foodCategories['단백질'].forEach(f => { if(f !== src && PrepStore.state.foodDB[f].p > 0) { resHtml += `<div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0 text-base"><span class="text-slate-400">${f}</span><span class="text-white font-bold">${Math.round(targetMacro/PrepStore.state.foodDB[f].p)}g</span></div>`; } });
+        } else if(type === 'fat') {
+            targetMacro = amt * PrepStore.state.foodDB[src].f;
+            PrepStore.state.foodCategories['지방'].forEach(f => { if(f !== src && PrepStore.state.foodDB[f].f > 0.1) { resHtml += `<div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0 text-base"><span class="text-slate-400">${f}</span><span class="text-white font-bold">${Math.round(targetMacro/PrepStore.state.foodDB[f].f)}g</span></div>`; } });
+        }
+        document.getElementById(`calc-${type}-res`).innerHTML = resHtml;
+    },
+
+    switchMainTab: function(tabId) { 
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); document.getElementById(tabId).classList.remove('hidden'); 
+        const tabs = ['tab-timeline', 'tab-calculator', 'tab-analysis'];
+        tabs.forEach(t => { document.getElementById('btn-' + t).className = (t === tabId) ? "px-5 py-3 rounded-xl text-base font-bold active-tab shrink-0" : "px-5 py-3 rounded-xl text-base font-bold border border-slate-800 text-slate-400 hover:text-white shrink-0"; });
+        if(tabId === 'tab-analysis') this.calculateMacros(); // 차트 강제 업데이트
+    },
+
+    renderCustomSupps: function() {
+        const container = document.getElementById('custom-supp-list'); container.innerHTML = '';
+        PrepStore.state.customSupps.forEach((supp, idx) => {
+            container.innerHTML += `
+            <div class="bg-slate-900 border border-slate-700 p-5 rounded-xl relative">
+                <button onclick="PrepApp.removeCustomSupp(${idx})" class="absolute top-3 right-3 text-rose-500 text-sm font-bold hover:text-rose-400">✕ 삭제</button>
+                <input type="text" id="supp-name-${idx}" value="${supp.name}" placeholder="보충제 명칭" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white font-bold mb-4 focus:border-sky-500 outline-none text-base">
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div class="flex items-center justify-between"><span class="text-slate-400">기준 중량(g)</span><input type="number" id="supp-wt-${idx}" value="${supp.weight}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                    <div class="flex items-center justify-between"><span class="text-slate-400">총 Kcal</span><input type="number" id="supp-k-${idx}" value="${supp.kcal}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                    <div class="flex items-center justify-between"><span class="text-amber-500">탄(g)</span><input type="number" step="0.1" id="supp-c-${idx}" value="${supp.carbs}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                    <div class="flex items-center justify-between"><span class="text-emerald-500">단(g)</span><input type="number" step="0.1" id="supp-p-${idx}" value="${supp.protein}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                    <div class="flex items-center justify-between"><span class="text-sky-500">지(g)</span><input type="number" step="0.1" id="supp-f-${idx}" value="${supp.fat}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                </div>
+            </div>`;
+        });
+    },
+
+    saveMacroModal: function() { 
+        let updatedSupps = [];
+        for(let i=0; i<PrepStore.state.customSupps.length; i++) {
+            let n = document.getElementById(`supp-name-${i}`).value || '보충제'+i;
+            updatedSupps.push({
+                id: PrepStore.state.customSupps[i].id, name: n,
+                weight: parseFloat(document.getElementById(`supp-wt-${i}`).value)||30,
+                kcal: parseFloat(document.getElementById(`supp-k-${i}`).value)||0,
+                carbs: parseFloat(document.getElementById(`supp-c-${i}`).value)||0,
+                protein: parseFloat(document.getElementById(`supp-p-${i}`).value)||0,
+                fat: parseFloat(document.getElementById(`supp-f-${i}`).value)||0
+            });
+        }
+        PrepStore.state.customSupps = updatedSupps;
+        PrepStore.applyCustomSuppsToDB(); document.getElementById('macro-modal').classList.add('hidden'); document.getElementById('macro-modal').classList.remove('flex');
+        this.triggerSave(); this.loadPhase(PrepStore.state.currentPhase); this.showToast("보충제 DB(Database)가 업데이트되었습니다."); 
+    },
+
+    exportDataJSON: function() {
+        const dataStr = JSON.stringify({ phaseData: PrepStore.state.phaseData, customSupps: PrepStore.state.customSupps, userInfo: PrepStore.state.userInfo }, null, 2);
+        const pad = n => n<10?'0'+n:n; const now = new Date();
+        const exportFileDefaultName = `Diet_현체중(${PrepStore.state.userInfo.weight})_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.json(JavaScript Object Notation)`;
+        const linkElement = document.createElement('a'); linkElement.setAttribute('href', 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr)); linkElement.setAttribute('download', exportFileDefaultName); linkElement.click(); this.showToast("식단 백업 파일이 다운로드되었습니다.");
+    },
+
+    importDataJSON: function(e) {
+        const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
+        reader.onload = (e) => { 
+            try { 
+                const data = JSON.parse(e.target.result); 
+                if(data.phaseData) PrepStore.state.phaseData = data.phaseData; 
+                if(data.customSupps) PrepStore.state.customSupps = data.customSupps; 
+                if(data.userInfo) PrepStore.state.userInfo = data.userInfo; 
+                PrepStore.applyCustomSuppsToDB(); PrepApp.triggerSave(); PrepApp.finishInit(); PrepApp.showToast("데이터가 복원되었습니다."); 
+            } catch(err) { PrepApp.showToast("올바르지 않은 백업 파일입니다."); } 
+        };
+        reader.readAsText(file); e.target.value = '';
+    }
+};
+
+window.addEventListener('scroll', function() {
+    const stickyBar = document.getElementById('sticky-macro-bar');
+    if (window.scrollY > 350) { stickyBar.classList.remove('-translate-y-full', 'opacity-0', 'pointer-events-none'); stickyBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto'); } 
+    else { stickyBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto'); stickyBar.classList.add('-translate-y-full', 'opacity-0', 'pointer-events-none'); }
+});
+</script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+window.PrepServices = {
+    saveToCloud: async function() {
+        if (!PrepStore.state.userId || !PrepStore.state.db) return;
+        await setDoc(doc(PrepStore.state.db, 'artifacts', PrepStore.state.appId, 'users', PrepStore.state.userId, 'prepData', 'userData'), 
+            { phaseData: PrepStore.state.phaseData, customSupps: PrepStore.state.customSupps, userInfo: PrepStore.state.userInfo }, { merge: true });
+    },
+    
+    init: async function() {
+        try {
+            const cfg = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null;
+            if (!cfg) { PrepApp.finishInit(); return; }
+            const app = initializeApp(cfg); const auth = getAuth(app); PrepStore.state.db = getFirestore(app);
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token); else await signInAnonymously(auth);
+            onAuthStateChanged(auth, async (user) => { 
+                if (user) { 
+                    PrepStore.state.userId = user.uid; 
+                    const snap = await getDoc(doc(PrepStore.state.db, 'artifacts', PrepStore.state.appId, 'users', PrepStore.state.userId, 'prepData', 'userData'));
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        if (data.phaseData) PrepStore.state.phaseData = data.phaseData;
+                        if (data.customSupps) PrepStore.state.customSupps = data.customSupps;
+                        if (data.userInfo) PrepStore.state.userInfo = data.userInfo;
+                    }
+                } 
+                PrepApp.finishInit(); 
+            });
+        } catch (e) { PrepApp.finishInit(); }
+    }
+};
+
+// 파이어베이스 구동
+window.PrepServices.init();
+</script>
+
+<footer class="mt-8 pb-8 text-center text-slate-500 text-xs px-4 border-t border-slate-800/80 pt-6">
+    <p>제공되는 대사량 수치, 칼로리 총합 및 비율 분석 결과는 통계 기준 데이터에 근거한 근사치이므로 정확하지 않을 수 있기 때문에 확인이 필요합니다.</p>
+</footer>
+</body>
+</html>
+
+<footer class="mt-8 pb-8 text-center text-slate-500 text-xs px-4 border-t border-slate-800/80 pt-6">
+    <p>제공되는 대사량 수치, 칼로리 총합 및 비율 분석 결과는 통계 기준 데이터에 근거한 근사치이므로 정확하지 않을 수 있기 때문에 확인이 필요합니다.</p>
+</footer>
+</body>
+</html>
