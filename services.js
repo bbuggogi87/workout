@@ -5,11 +5,11 @@ import { state, applyCustomSuppsToDB } from './store.js';
 
 let saveTimeout = null;
 
-function saveToLocal() {
+export function saveToLocal() {
     localStorage.setItem('prep_master_local_data', JSON.stringify({ phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo }));
 }
 
-function loadFromLocal() {
+export function loadFromLocal() {
     const local = localStorage.getItem('prep_master_local_data');
     if (local) {
         try {
@@ -17,34 +17,35 @@ function loadFromLocal() {
             if (parsed.phases) state.phases = parsed.phases;
             if (parsed.customSupps) state.customSupps = parsed.customSupps;
             if (parsed.userInfo) state.userInfo = parsed.userInfo;
-        } catch(e) {}
+            return true;
+        } catch(e) { return false; }
     }
+    return false;
 }
 
 export async function initializeFirebase(onInitComplete) {
-    loadFromLocal(); // 초기 구동 속도 향상을 위해 로컬 데이터 우선 렌더링
-    
+    loadFromLocal(); // 구동 지연 차단을 위해 로컬 캐시 즉시 화면 로드
     try {
         const cfg = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null;
-        if (!cfg) { onInitComplete(false); return; } // 클라우드 설정이 없으면 즉각 로컬 모드
+        if (!cfg) { onInitComplete(false); return; }
         
-        const app = initializeApp(cfg);
-        const auth = getAuth(app);
-        state.db = getFirestore(app);
-
+        const app = initializeApp(cfg); const auth = getAuth(app); state.db = getFirestore(app);
         await signInAnonymously(auth);
+
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 state.userId = user.uid;
-                const docRef = doc(state.db, 'artifacts', state.appId, 'users', state.userId, 'prepData', 'userData');
-                const snap = await getDoc(docRef);
+                const snap = await getDoc(doc(state.db, 'artifacts', state.appId, 'users', state.userId, 'prepData', 'userData'));
                 if (snap.exists()) {
                     const data = snap.data();
-                    if (data.phaseData && !data.phases) { 
+                    
+                    // 구버전 및 백업본 동적 마이그레이션 통합 예외 처리
+                    if (data.phaseData && !data.phases) {
                         let migrated = []; let idx = 1;
                         for (let key in data.phaseData) { migrated.push({ id: 'p_' + idx++, title: data.phaseData[key].title || key, desc: data.phaseData[key].desc || '', meals: data.phaseData[key].meals || [] }); }
                         state.phases = migrated;
                     } else if (data.phases) { state.phases = data.phases; }
+                    
                     if (data.customSupps) state.customSupps = data.customSupps;
                     if (data.userInfo) state.userInfo = data.userInfo;
                     saveToLocal();
@@ -52,27 +53,18 @@ export async function initializeFirebase(onInitComplete) {
             }
             onInitComplete(true);
         });
-    } catch (e) {
-        onInitComplete(false);
-    }
+    } catch (e) { onInitComplete(false); }
 }
 
 export async function saveToCloud() {
-    saveToLocal(); // 무조건 안전 백업
+    saveToLocal();
     if (!state.userId || !state.db) return;
-    try {
-        const docRef = doc(state.db, 'artifacts', state.appId, 'users', state.userId, 'prepData', 'userData');
-        await setDoc(docRef, { phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo }, { merge: true });
-    } catch(e) {}
+    try { await setDoc(doc(state.db, 'artifacts', state.appId, 'users', state.userId, 'prepData', 'userData'), { phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo }, { merge: true }); } catch(e) {}
 }
 
 export function triggerSave(showToastCallback) {
-    saveToLocal();
-    if (saveTimeout) clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-        saveToCloud();
-        if(showToastCallback) showToastCallback("저장 동기화 완료.");
-    }, 1000);
+    saveToLocal(); if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => { saveToCloud(); if(showToastCallback) showToastCallback("저장 동기화 완료."); }, 800);
 }
 
 export function exportDataJSON(showToastCallback) {
@@ -88,14 +80,12 @@ export function importDataJSON(file, onSuccess, onError) {
     reader.onload = function(e) {
         try {
             const data = JSON.parse(e.target.result);
-            if (data.phaseData && !data.phases) { 
+            if (data.phaseData && !data.phases) {
                 let migrated = []; let idx = 1;
                 for (let key in data.phaseData) { migrated.push({ id: 'p_' + idx++, title: data.phaseData[key].title || key, desc: data.phaseData[key].desc || '', meals: data.phaseData[key].meals || [] }); }
                 state.phases = migrated;
             } else if(data.phases) { state.phases = data.phases; }
-            if(data.customSupps) state.customSupps = data.customSupps;
-            if(data.userInfo) state.userInfo = data.userInfo;
-            
+            if(data.customSupps) state.customSupps = data.customSupps; if(data.userInfo) state.userInfo = data.userInfo;
             applyCustomSuppsToDB(); saveToLocal(); saveToCloud(); if(onSuccess) onSuccess();
         } catch(err) { if(onError) onError(); }
     };
