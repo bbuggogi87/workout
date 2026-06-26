@@ -1,8 +1,6 @@
 import { state, applyCustomSuppsToDB } from './store.js';
 import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON } from './services.js';
 
-let draggedMealIndex = null;
-
 export function showToast(msg) { 
     const t = document.getElementById('toast'); 
     document.getElementById('toast-text').innerText = msg; 
@@ -17,16 +15,6 @@ export function finishInit() {
     applyCustomSuppsToDB(); initCalcDropdowns();
     if(state.phases.length > 0) loadPhase(state.phases[0].id); 
     runSmartCalc('carb'); runSmartCalc('pro'); runSmartCalc('fat');
-}
-
-export function dragStart(mIdx) { draggedMealIndex = mIdx; }
-export function drop(targetIdx) {
-    if (draggedMealIndex === null || draggedMealIndex === targetIdx) return;
-    const cp = state.phases.find(p => p.id === state.currentPhaseId);
-    const draggedItem = cp.meals.splice(draggedMealIndex, 1)[0];
-    cp.meals.splice(targetIdx, 0, draggedItem);
-    draggedMealIndex = null;
-    triggerSave(showToast); loadPhase(state.currentPhaseId);
 }
 
 export function renderPhaseTabs() {
@@ -69,13 +57,16 @@ export function loadPhase(phaseId) {
             </div>`;
         });
 
+        // 네이티브 drag 속성 완전히 제거 및 시계창 너비 최소 125px 고정 보장
         container.innerHTML += `
-        <div class="relative transition-all duration-300 mb-6" draggable="true" ondragstart="window.dragStart(${mIdx})" ondragover="event.preventDefault();" ondrop="window.drop(${mIdx})">
-            <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="drag-handle absolute -left-[35px] sm:-left-[58px] top-3 w-6 h-6 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow cursor-move flex items-center justify-center shadow-lg" title="클릭: 색상변경 / 드래그: 순서변경"></div>
+        <div class="relative transition-all duration-300 mb-6">
+            <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="drag-handle absolute -left-[35px] sm:-left-[58px] top-3 w-6 h-6 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow cursor-move flex items-center justify-center shadow-lg" title="클릭: 색상변경 / 모바일은 길게 터치하여 순서변경">
+                <span class="text-white/60 text-[10px] font-black select-none pointer-events-none">↕</span>
+            </div>
             <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-slate-800">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center cursor-pointer gap-3 sm:gap-0" onclick="window.toggleCollapse(${mIdx})">
                     <div class="flex items-center gap-2 sm:gap-4 w-full sm:w-auto" onclick="event.stopPropagation()">
-                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-xl sm:text-2xl outline-none w-[140px] sm:w-[155px] shrink-0 p-0 tracking-tighter">
+                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-xl sm:text-2xl outline-none shrink-0 p-0 tracking-tighter" style="min-width: 125px;">
                         <input type="text" onchange="window.updateMealField(${mIdx}, 'label', event.target.value)" value="${meal.label}" class="px-2 py-1 text-xs sm:text-sm font-bold uppercase bg-${meal.color}-500/10 text-${meal.color}-400 border border-${meal.color}-500/20 rounded-md outline-none flex-1 min-w-[100px] max-w-[200px]">
                     </div>
                     <div class="flex gap-2 items-center self-end sm:self-auto shrink-0" onclick="event.stopPropagation()">
@@ -96,6 +87,7 @@ export function loadPhase(phaseId) {
     });
     calculateMacros();
 
+    // SortableJS 기반으로 안전하게 순서 교체 지원
     if (typeof Sortable !== 'undefined') {
         if (window.timelineSortable) { window.timelineSortable.destroy(); }
         window.timelineSortable = new Sortable(document.getElementById('timeline-container'), {
@@ -109,7 +101,6 @@ export function loadPhase(phaseId) {
                 const movedItem = cp.meals.splice(oldIdx, 1)[0];
                 cp.meals.splice(newIdx, 0, movedItem);
                 triggerSave(showToast);
-                setTimeout(() => loadPhase(state.currentPhaseId), 10);
             }
         });
     }
@@ -296,11 +287,10 @@ export function saveMacroModal() {
         let n = document.getElementById(`supp-name-${i}`).value || '보충제'+i;
         updatedSupps.push({ id: state.customSupps[i].id, name: n, weight: parseFloat(document.getElementById(`supp-wt-${i}`).value)||30, kcal: parseFloat(document.getElementById(`supp-k-${i}`).value)||0, carbs: parseFloat(document.getElementById(`supp-c-${i}`).value)||0, protein: parseFloat(document.getElementById(`supp-p-${i}`).value)||0, fat: parseFloat(document.getElementById(`supp-f-${i}`).value)||0 });
     }
-    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 가동 환경 변경 완료."); 
+    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 Database 가동 환경 변경 완료."); 
 }
 
-// --- 전역 윈도우(Window) 바인딩 (치명적 오류 수정 완료 영역) ---
-window.dragStart = dragStart; window.drop = drop;
+// 브라우저 윈도우 전역 함수 매핑 
 window.switchMainTab = switchMainTab; window.loadPhase = loadPhase; window.cycleColor = cycleColor; window.toggleCollapse = toggleCollapse; window.updateMealField = updateMealField; window.updateItemName = updateItemName; window.updateItemAmount = updateItemAmount; window.addItem = addItem; window.deleteItem = deleteItem; window.deleteMeal = deleteMeal; 
 window.openPhaseModal = openPhaseModal; window.closePhaseModal = closePhaseModal; window.savePhaseModal = savePhaseModal; window.deletePhase = deletePhase; window.copyPhase = copyPhase; window.pastePhase = pastePhase;
 window.openEditMealModal = openEditMealModal; window.closeEditMealModal = closeEditMealModal; window.saveEditMealModal = saveEditMealModal;
