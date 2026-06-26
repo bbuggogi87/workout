@@ -16,9 +16,9 @@ export const FOOD_CATEGORIES = {
 export const INITIAL_USER_INFO = { targetBF: '4.0', height: 173, weight: 72.5, targetDate: '2026-07-18' };
 export const INITIAL_CUSTOM_SUPPS = [ { id: 1, name: '단백질 보충제', weight: 30, kcal: 120, carbs: 3, protein: 24, fat: 1.5 } ];
 
-export const INITIAL_PHASE_DATA = {
-    'D-4': { 
-        title: 'D-4 주차', desc: '식단, 영양제, 훈련 일정을 자유롭게 배치하고 섭취 메모를 남겨보세요.', 
+export const INITIAL_PHASES = [
+    { 
+        id: 'p_1', title: '기본 베이스 식단', desc: '식단, 영양제, 훈련 일정을 자유롭게 배치하고 섭취 메모를 남겨보세요.', 
         meals: [
             { id: 'm1', time: '12:00', label: '식사 1 (첫 식사)', color: 'sky', explain: '', supps: '[보충제 패키지 A]\n• 멀티비타민 2캡슐\n• OptiMSM 1.5g\n• CoQ10 100mg\n• 오메가-3 1캡슐', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}, {name:'아몬드', amount:15}], isWorkout: false, isCollapsed: false },
             { id: 'm2', time: '17:00', label: '식사 2 (1차 분할)', color: 'amber', explain: '', supps: '[보충제 패키지 B]\n• 멀티비타민 1캡슐\n• OptiMSM 1.5g', items: [{name:'감자', amount:115}, {name:'닭가슴살', amount:75}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}], isWorkout: false, isCollapsed: false },
@@ -30,6 +30,6 @@ export const INITIAL_PHASE_DATA = {
             { id: 'm8', time: '03:00', label: '식사 4 (취침 전)', color: 'slate', explain: '', supps: '보충제 없음\n(깊은 수면 유도)', items: [{name:'블루베리', amount:100}, {name:'아몬드', amount:20}], isWorkout: false, isCollapsed: false }
         ] 
     },
-    'D-1': { title: 'D-1 주차', desc: '수분 조절 & 밴딩', meals: [] }, 
-    'D-DAY': { title: 'D-Day', desc: '로딩 & 당일 펌핑', meals: [] }
-};
+    { id: 'p_2', title: '수분 조절 & 밴딩', desc: '수분 조절 및 밴딩 스케줄 메모', meals: [] }, 
+    { id: 'p_3', title: 'D-Day 카보로딩', desc: '당일 식단 및 무대 펌핑', meals: [] }
+];
