@@ -57,14 +57,14 @@ export function loadPhase(phaseId) {
             </div>`;
         });
 
-        // 텍스트 잘림 해결 (w-[110px]) 및 SortableJS 드래그 핸들(cursor-move) 적용
+        // 드래그 핸들(동그라미)에 .drag-handle 클래스 부여 및 시간 입력창 너비(w-[140px] sm:w-[155px]) 대폭 확대 적용
         container.innerHTML += `
-        <div class="relative transition-all duration-300 mb-6 meal-card-item">
-            <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="absolute -left-[35px] sm:-left-[58px] top-3 w-5 h-5 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow cursor-move" title="터치 및 드래그시 순서 변경"></div>
+        <div class="relative transition-all duration-300 mb-6">
+            <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="drag-handle absolute -left-[35px] sm:-left-[58px] top-3 w-6 h-6 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow cursor-move flex items-center justify-center shadow-lg" title="클릭: 색상변경 / 드래그: 순서변경"></div>
             <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-slate-800">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center cursor-pointer gap-3 sm:gap-0" onclick="window.toggleCollapse(${mIdx})">
                     <div class="flex items-center gap-2 sm:gap-4 w-full sm:w-auto" onclick="event.stopPropagation()">
-                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-2xl outline-none w-[110px] shrink-0 p-0 tracking-tighter text-center">
+                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-xl sm:text-2xl outline-none w-[140px] sm:w-[155px] shrink-0 p-0 tracking-tighter">
                         <input type="text" onchange="window.updateMealField(${mIdx}, 'label', event.target.value)" value="${meal.label}" class="px-2 py-1 text-xs sm:text-sm font-bold uppercase bg-${meal.color}-500/10 text-${meal.color}-400 border border-${meal.color}-500/20 rounded-md outline-none flex-1 min-w-[100px] max-w-[200px]">
                     </div>
                     <div class="flex gap-2 items-center self-end sm:self-auto shrink-0" onclick="event.stopPropagation()">
@@ -85,18 +85,20 @@ export function loadPhase(phaseId) {
     });
     calculateMacros();
 
-    // SortableJS 모바일 터치 드래그 초기화
-    if(window.timelineSortable) { window.timelineSortable.destroy(); }
-    window.timelineSortable = new Sortable(containerEl, {
-        handle: '.cursor-move',
-        animation: 150,
-        delay: 200, // 모바일 스크롤 구분을 위한 0.2초 딜레이
-        delayOnTouchOnly: true,
+    // 모바일 드래그 앤 드롭을 지원하는 SortableJS 초기화 적용
+    if (window.timelineSortable) { window.timelineSortable.destroy(); }
+    window.timelineSortable = new Sortable(document.getElementById('timeline-container'), {
+        handle: '.drag-handle', // 동그라미 아이콘으로만 드래그 가능
+        animation: 250,
+        ghostClass: 'opacity-50',
         onEnd: function (evt) {
+            const oldIdx = evt.oldIndex; const newIdx = evt.newIndex;
+            if (oldIdx === newIdx) return;
             const cp = state.phases.find(p => p.id === state.currentPhaseId);
-            const movedItem = cp.meals.splice(evt.oldIndex, 1)[0];
-            cp.meals.splice(evt.newIndex, 0, movedItem);
+            const movedItem = cp.meals.splice(oldIdx, 1)[0];
+            cp.meals.splice(newIdx, 0, movedItem); // 바뀐 위치에 데이터 주입
             triggerSave(showToast);
+            setTimeout(() => loadPhase(state.currentPhaseId), 10);
         }
     });
 }
@@ -132,12 +134,13 @@ export function copyPhase() {
 }
 export function pastePhase() {
     if (!state.clipboardMeals || state.clipboardMeals.length === 0) { showToast("복사된 식단 세트가 없습니다."); return; }
+    // 덮어쓰기 경고창 및 데이터 100% 교체 로직 적용
     if(confirm("⚠️ 붙여넣기를 진행하면 현재 탭의 기존 식단이 모두 지워집니다.\n정말 덮어쓰시겠습니까?")) {
         const cp = state.phases.find(p => p.id === state.currentPhaseId);
         const newMeals = state.clipboardMeals.map(m => {
             let cloned = JSON.parse(JSON.stringify(m)); cloned.id = 'm' + Date.now() + Math.floor(Math.random() * 1000); return cloned;
         });
-        cp.meals = newMeals;
+        cp.meals = newMeals; // 배열 완전 교체
         triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("식단 세트가 성공적으로 덮어쓰기 되었습니다.");
     }
 }
@@ -158,6 +161,7 @@ export function saveEditMealModal() {
     const time = document.getElementById('edit-meal-time').value; const label = document.getElementById('edit-meal-label').value || '일정';
     const color = document.getElementById('edit-meal-color').value; const explain = document.getElementById('edit-meal-explain').value;
     const supps = document.getElementById('edit-meal-supps').value; const cp = state.phases.find(p => p.id === state.currentPhaseId);
+    
     if (state.editingMealState.mIdx === null || state.editingMealState.isDuplicate) {
         const newObj = { id: 'm'+Date.now(), time: time, label: label, color: color, explain: explain, supps: supps, items: JSON.parse(JSON.stringify(state.editingMealState.originalItems)), isCollapsed: false };
         if(state.editingMealState.isDuplicate) {
@@ -167,6 +171,7 @@ export function saveEditMealModal() {
         const meal = cp.meals[state.editingMealState.mIdx];
         meal.time = time; meal.label = label; meal.color = color; meal.explain = explain; meal.supps = supps; showToast("일정이 수정되었습니다.");
     }
+    // 수동 순서 정렬 유지를 위해 자동 시간순 정렬 제거
     triggerSave(showToast); closeEditMealModal(); loadPhase(state.currentPhaseId);
 }
 
@@ -281,9 +286,10 @@ export function saveMacroModal() {
         let n = document.getElementById(`supp-name-${i}`).value || '보충제'+i;
         updatedSupps.push({ id: state.customSupps[i].id, name: n, weight: parseFloat(document.getElementById(`supp-wt-${i}`).value)||30, kcal: parseFloat(document.getElementById(`supp-k-${i}`).value)||0, carbs: parseFloat(document.getElementById(`supp-c-${i}`).value)||0, protein: parseFloat(document.getElementById(`supp-p-${i}`).value)||0, fat: parseFloat(document.getElementById(`supp-f-${i}`).value)||0 });
     }
-    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 Database 가동 환경 변경 완료."); 
+    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 가동 환경 변경 완료."); 
 }
 
+// 전역 윈도우 바인딩 영역 (Sortable 관련 함수는 내부로 이동되어 제거됨)
 window.switchMainTab = switchMainTab; window.loadPhase = loadPhase; window.cycleColor = cycleColor; window.toggleCollapse = toggleCollapse; window.updateMealField = updateMealField; window.updateItemName = updateItemName; window.updateItemAmount = updateItemAmount; window.addItem = addItem; window.deleteItem = deleteItem; window.deleteMeal = deleteMeal; 
 window.openPhaseModal = openPhaseModal; window.closePhaseModal = closePhaseModal; window.savePhaseModal = savePhaseModal; window.deletePhase = deletePhase; window.copyPhase = copyPhase; window.pastePhase = pastePhase;
 window.openEditMealModal = openEditMealModal; window.closeEditMealModal = closeEditMealModal; window.saveEditMealModal = saveEditMealModal;
