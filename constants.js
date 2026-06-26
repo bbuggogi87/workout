@@ -20,7 +20,7 @@ export const INITIAL_PHASES = [
     { 
         id: 'p_1', title: '기본 베이스 식단', desc: '식단, 영양제, 훈련 일정을 자유롭게 배치하고 섭취 메모를 남겨보세요.', 
         meals: [
-           { id: 'm1', time: '12:00', label: '식사 1 (첫 식사)', color: 'sky', explain: '', supps: '[보충제 패키지 A]\n• 멀티비타민 2캡슐\n• OptiMSM 1.5g\n• CoQ10 100mg\n• 오메가-3 1캡슐', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}, {name:'아몬드', amount:15}], isWorkout: false, isCollapsed: false },
+            { id: 'm1', time: '12:00', label: '식사 1 (첫 식사)', color: 'sky', explain: '', supps: '[보충제 패키지 A]\n• 멀티비타민 2캡슐\n• OptiMSM 1.5g\n• CoQ10 100mg\n• 오메가-3 1캡슐', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}, {name:'아몬드', amount:15}], isWorkout: false, isCollapsed: false },
             { id: 'm2', time: '17:00', label: '식사 2 (1차 분할)', color: 'amber', explain: '', supps: '[보충제 패키지 B]\n• 멀티비타민 1캡슐\n• OptiMSM 1.5g', items: [{name:'감자', amount:115}, {name:'닭가슴살', amount:75}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}], isWorkout: false, isCollapsed: false },
             { id: 'm3', time: '19:00', label: '식사 2 (2차 분할)', color: 'emerald', explain: '', supps: '보충제 없음\n(훈련 전 위장 부담 최소화 및 복압 확보)', items: [{name:'감자', amount:115}, {name:'닭가슴살', amount:75}], isWorkout: false, isCollapsed: false },
             { id: 'm4', time: '21:00', label: '고강도 웨이트 훈련', color: 'rose', explain: '오후 메인 본 운동 세션 인트라 아웃 워크아웃', supps: '', items: [], isWorkout: true, isCollapsed: false },
@@ -28,7 +28,7 @@ export const INITIAL_PHASES = [
             { id: 'm6', time: '23:40', label: '포스트 워크아웃', color: 'sky', explain: '골격근 동화 창 오픈 타이밍\n* 유산소 완전히 끝난 직후 섭취', supps: '• 크레아틴 6g', items: [{name:'단백질 보충제', amount:30}], isWorkout: false, isCollapsed: false },
             { id: 'm7', time: '01:00', label: '식사 3 (새벽 식사)', color: 'amber', explain: '', supps: '보충제 절대 금지\n(B군 각성 작용으로 인한 수면 방해 차단)', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:180}], isWorkout: false, isCollapsed: false },
             { id: 'm8', time: '03:00', label: '식사 4 (취침 전)', color: 'slate', explain: '', supps: '보충제 없음\n(깊은 수면 유도)', items: [{name:'블루베리', amount:100}, {name:'아몬드', amount:20}], isWorkout: false, isCollapsed: false }
-       ] 
+        ] 
     },
     { id: 'p_2', title: '수분 조절 & 밴딩', desc: '수분 조절 및 밴딩 상세 일정 관리 탭', meals: [] }, 
     { id: 'p_3', title: 'D-Day 카보로딩', desc: '대회 당일 최상의 컨디션을 위한 카보로딩 로직', meals: [] }
