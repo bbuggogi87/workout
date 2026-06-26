@@ -11,41 +11,38 @@ export function showToast(msg) {
 export function finishInit() { 
     document.getElementById('prof-weight-display').innerText = state.userInfo.weight + 'kg'; 
     document.getElementById('prof-bf-display').innerText = state.userInfo.targetBF + '%';
-    if(state.userInfo.targetDate) { 
-        document.getElementById('badge-target-date').innerText = `Target Date: ${state.userInfo.targetDate.substring(5).replace('-','.')}`; 
-    }
-    applyCustomSuppsToDB();
-    initCalcDropdowns();
-    loadPhase('D-4'); 
+    if(state.userInfo.targetDate) { document.getElementById('badge-target-date').innerText = `Target Date: ${state.userInfo.targetDate.substring(5).replace('-','.')}`; }
+    applyCustomSuppsToDB(); initCalcDropdowns();
+    if(state.phases.length > 0) loadPhase(state.phases[0].id); 
     runSmartCalc('carb'); runSmartCalc('pro'); runSmartCalc('fat');
 }
 
-export function cycleColor(mIdx) {
-    const colors = ['sky', 'emerald', 'amber', 'rose', 'violet', 'slate'];
-    const current = state.phaseData[state.currentPhase].meals[mIdx].color || 'sky';
-    const next = colors[(colors.indexOf(current) + 1) % colors.length];
-    state.phaseData[state.currentPhase].meals[mIdx].color = next;
-    triggerSave(showToast); loadPhase(state.currentPhase);
-}
+// ==========================================
+// 1. 탭(Phase) 식단 세트 관리 로직
+// ==========================================
 
-export function toggleCollapse(mIdx) {
-    let meal = state.phaseData[state.currentPhase].meals[mIdx];
-    meal.isCollapsed = !meal.isCollapsed;
-    loadPhase(state.currentPhase);
-}
-
-export function loadPhase(phaseKey) { 
-    state.currentPhase = phaseKey; 
-    ['D-4', 'D-1', 'D-DAY'].forEach(key => { 
-        document.getElementById('btn-phase-' + key).className = (key === phaseKey) ? "px-5 py-3 rounded-lg text-base font-bold phase-btn-active shrink-0" : "px-5 py-3 rounded-lg text-base font-bold text-slate-400 hover:bg-slate-800 shrink-0"; 
+export function renderPhaseTabs() {
+    const container = document.getElementById('phase-tabs-container'); container.innerHTML = '';
+    state.phases.forEach(p => {
+        const isActive = (p.id === state.currentPhaseId);
+        const btnClass = isActive ? "px-5 py-3 rounded-lg text-base font-bold phase-btn-active shrink-0 transition-colors" : "px-5 py-3 rounded-lg text-base font-bold text-slate-400 hover:bg-slate-800 shrink-0 transition-colors";
+        container.innerHTML += `<button onclick="window.loadPhase('${p.id}')" class="${btnClass}">${p.title}</button>`;
     });
-    document.getElementById('phase-description').innerText = state.phaseData[phaseKey].desc;
+}
 
+export function loadPhase(phaseId) { 
+    if(!state.phases.find(p => p.id === phaseId) && state.phases.length > 0) phaseId = state.phases[0].id;
+    state.currentPhaseId = phaseId; 
+    renderPhaseTabs();
+    const currentPhase = state.phases.find(p => p.id === phaseId);
+    if(!currentPhase) return;
+
+    document.getElementById('phase-description').innerText = currentPhase.desc;
     const container = document.getElementById('timeline-container'); container.innerHTML = '';
-    state.phaseData[phaseKey].meals.forEach((meal, mIdx) => {
+    
+    currentPhase.meals.forEach((meal, mIdx) => {
         let itemsHtml = '';
         if(!meal.items) meal.items = [];
-
         meal.items.forEach((item, iIdx) => {
             let opts = `<optgroup label="탄수화물">` + state.foodCategories['탄수화물'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
             opts += `<optgroup label="단백질">` + state.foodCategories['단백질'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
@@ -55,35 +52,37 @@ export function loadPhase(phaseKey) {
             
             itemsHtml += `
             <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-slate-800 mb-2">
-                <select onchange="window.updateItemName(event)" data-meal="${mIdx}" data-item="${iIdx}" class="bg-slate-800 text-slate-200 text-sm px-3 py-2 rounded-lg outline-none w-[140px] sm:w-[160px]">${opts}</select>
+                <select onchange="window.updateItemName(${mIdx}, ${iIdx}, event.target.value)" class="bg-slate-800 text-slate-200 text-sm px-3 py-2 rounded-lg outline-none w-[140px] sm:w-[160px]">${opts}</select>
                 <div class="flex items-center gap-2">
-                    <input type="number" oninput="window.updateItemAmount(event)" data-meal="${mIdx}" data-item="${iIdx}" class="w-16 sm:w-20 bg-slate-950 text-white text-right text-base px-3 py-2 rounded-lg focus:border-sky-500 outline-none" value="${item.amount || 0}">
+                    <input type="number" oninput="window.updateItemAmount(${mIdx}, ${iIdx}, event.target.value)" class="w-16 sm:w-20 bg-slate-950 text-white text-right text-base px-3 py-2 rounded-lg focus:border-sky-500 outline-none" value="${item.amount || 0}">
                     <span class="text-sm text-slate-400 font-bold">g</span>
                     <button onclick="window.deleteItem(${mIdx}, ${iIdx})" class="text-slate-600 hover:text-rose-400 ml-2 px-2 text-lg">✕</button>
                 </div>
             </div>`;
         });
 
+        // 모바일 가시성을 극대화한 다단구조 헤더 레이아웃 적용
         container.innerHTML += `
         <div class="relative transition-all duration-300 mb-6">
             <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="absolute -left-[35px] sm:-left-[58px] top-3 w-5 h-5 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow" title="색상 변경"></div>
-            <div class="glass-panel p-5 rounded-2xl border border-slate-800">
-                <div class="flex justify-between items-center cursor-pointer" onclick="window.toggleCollapse(${mIdx})">
-                    <div class="flex items-center gap-2 sm:gap-4" onclick="event.stopPropagation()">
-                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-xl sm:text-2xl outline-none w-32 min-w-[120px] p-0 tracking-tighter">
-                        <input type="text" onchange="window.updateMealField(${mIdx}, 'label', event.target.value)" value="${meal.label}" class="px-2 py-1 text-sm sm:text-base font-bold uppercase bg-${meal.color}-500/10 text-${meal.color}-400 border border-${meal.color}-500/20 rounded-md outline-none w-[130px] sm:w-auto">
+            <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-slate-800">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center cursor-pointer gap-3 sm:gap-0" onclick="window.toggleCollapse(${mIdx})">
+                    <div class="flex items-center gap-2 sm:gap-4 w-full sm:w-auto" onclick="event.stopPropagation()">
+                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-xl sm:text-2xl outline-none w-[100px] shrink-0 p-0 tracking-tighter">
+                        <input type="text" onchange="window.updateMealField(${mIdx}, 'label', event.target.value)" value="${meal.label}" class="px-2 py-1 text-xs sm:text-sm font-bold uppercase bg-${meal.color}-500/10 text-${meal.color}-400 border border-${meal.color}-500/20 rounded-md outline-none flex-1 min-w-[100px] max-w-[200px]">
                     </div>
-                    <div class="flex gap-2 items-center" onclick="event.stopPropagation()">
-                        <button onclick="window.duplicateMeal(${mIdx})" class="text-sm text-slate-500 hover:text-sky-400 transition-colors p-1" title="복제">📋</button>
-                        <button onclick="window.deleteMeal(${mIdx})" class="text-sm text-slate-500 hover:text-rose-400 transition-colors p-1" title="삭제">🗑️</button>
-                        <button onclick="window.toggleCollapse(${mIdx})" class="text-slate-400 hover:text-white ml-2 p-1 text-sm sm:text-base">${meal.isCollapsed ? '🔽' : '🔼'}</button>
+                    <div class="flex gap-2 items-center self-end sm:self-auto shrink-0" onclick="event.stopPropagation()">
+                        <button onclick="window.openEditMealModal(${mIdx}, true)" class="text-xs sm:text-sm px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-300 rounded border border-slate-700 transition-colors">📋 복제</button>
+                        <button onclick="window.openEditMealModal(${mIdx}, false)" class="text-xs sm:text-sm px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors">⚙️ 수정</button>
+                        <button onclick="window.deleteMeal(${mIdx})" class="text-xs sm:text-sm px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-400 rounded border border-slate-700 transition-colors">🗑️ 삭제</button>
+                        <button onclick="window.toggleCollapse(${mIdx})" class="text-lg px-2 py-1 ml-1 text-slate-400 hover:text-white transition-colors">${meal.isCollapsed ? '🔽' : '🔼'}</button>
                     </div>
                 </div>
                 <div class="transition-all duration-300 overflow-hidden ${meal.isCollapsed ? 'max-h-0 opacity-0 m-0' : 'max-h-[3000px] opacity-100 mt-5'}">
-                    <input type="text" onchange="window.updateMealField(${mIdx}, 'explain', event.target.value)" value="${meal.explain || ''}" placeholder="스케줄 메모 (예: 오후 메인 본 운동 세션)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-lg text-white font-bold outline-none focus:border-sky-500 mb-3">
+                    <input type="text" onchange="window.updateMealField(${mIdx}, 'explain', event.target.value)" value="${meal.explain || ''}" placeholder="스케줄 메모 (예: 오후 메인 본 운동 세션)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-sm sm:text-base text-white font-bold outline-none focus:border-sky-500 mb-3">
                     <textarea onchange="window.updateMealField(${mIdx}, 'supps', event.target.value)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-sm sm:text-base text-slate-200 outline-none focus:border-sky-500 mb-3 min-h-[100px] custom-scrollbar" placeholder="보충제 섭취 프로토콜 및 상세 코칭 메모">${meal.supps || ''}</textarea>
                     ${itemsHtml}
-                    <button onclick="window.addItem(${mIdx})" class="w-full py-3 border border-dashed border-slate-700 text-sm text-slate-400 hover:text-sky-400 font-bold mt-2 rounded-xl transition-colors">+ 식품 및 보충제 추가</button>
+                    <button onclick="window.addItem(${mIdx})" class="w-full py-3 border border-dashed border-slate-700 text-sm sm:text-base text-slate-400 hover:text-sky-400 font-bold mt-2 rounded-xl transition-colors">+ 식품 및 보충제 추가</button>
                 </div>
             </div>
         </div>`;
@@ -91,38 +90,137 @@ export function loadPhase(phaseKey) {
     calculateMacros();
 }
 
-export function duplicateMeal(mIdx) {
-    let original = state.phaseData[state.currentPhase].meals[mIdx];
-    let clone = JSON.parse(JSON.stringify(original));
-    clone.id = 'm' + Date.now();
-    state.phaseData[state.currentPhase].meals.push(clone);
-    state.phaseData[state.currentPhase].meals.sort((a,b) => a.time.localeCompare(b.time));
-    triggerSave(showToast); loadPhase(state.currentPhase); showToast("일정이 복제되었습니다.");
+// 탭 추가/수정/삭제 로직
+export function openPhaseModal(isNew = false) {
+    state.editingPhaseIsNew = isNew;
+    if (isNew) { document.getElementById('phase-title').value = ''; document.getElementById('phase-desc').value = ''; } 
+    else {
+        const cp = state.phases.find(p => p.id === state.currentPhaseId);
+        document.getElementById('phase-title').value = cp.title; document.getElementById('phase-desc').value = cp.desc;
+    }
+    document.getElementById('phase-modal').classList.remove('hidden'); document.getElementById('phase-modal').classList.add('flex');
+}
+export function closePhaseModal() { document.getElementById('phase-modal').classList.add('hidden'); document.getElementById('phase-modal').classList.remove('flex'); }
+export function savePhaseModal() {
+    const title = document.getElementById('phase-title').value || '새로운 식단 탭';
+    const desc = document.getElementById('phase-desc').value || '';
+    if (state.editingPhaseIsNew) {
+        const newId = 'p_' + Date.now();
+        state.phases.push({ id: newId, title: title, desc: desc, meals: [] });
+        state.currentPhaseId = newId;
+    } else {
+        const cp = state.phases.find(p => p.id === state.currentPhaseId);
+        cp.title = title; cp.desc = desc;
+    }
+    closePhaseModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("식단 탭 정보가 저장되었습니다.");
+}
+export function deletePhase() {
+    if(state.phases.length <= 1) { showToast("최소 1개의 탭은 존재해야 합니다."); return; }
+    if(confirm("현재 식단 탭을 삭제하시겠습니까? 내부의 모든 스케줄이 삭제됩니다.")) {
+        state.phases = state.phases.filter(p => p.id !== state.currentPhaseId);
+        triggerSave(showToast); loadPhase(state.phases[0].id); showToast("식단 탭이 삭제되었습니다.");
+    }
+}
+export function copyPhase() {
+    const cp = state.phases.find(p => p.id === state.currentPhaseId);
+    state.clipboardMeals = JSON.parse(JSON.stringify(cp.meals));
+    showToast("현재 식단 세트가 클립보드에 복사되었습니다.");
+}
+export function pastePhase() {
+    if (!state.clipboardMeals || state.clipboardMeals.length === 0) { showToast("복사된 식단 세트가 없습니다."); return; }
+    const cp = state.phases.find(p => p.id === state.currentPhaseId);
+    const newMeals = state.clipboardMeals.map(m => {
+        let cloned = JSON.parse(JSON.stringify(m));
+        cloned.id = 'm' + Date.now() + Math.floor(Math.random() * 1000);
+        return cloned;
+    });
+    cp.meals = cp.meals.concat(newMeals);
+    cp.meals.sort((a,b) => a.time.localeCompare(b.time));
+    triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("식단 세트가 성공적으로 붙여넣기 되었습니다.");
 }
 
-export function updateMealField(mIdx, field, val) { state.phaseData[state.currentPhase].meals[mIdx][field] = val; if(field==='time') state.phaseData[state.currentPhase].meals.sort((a,b) => a.time.localeCompare(b.time)); triggerSave(showToast); loadPhase(state.currentPhase); }
-export function updateItemName(e) { state.phaseData[state.currentPhase].meals[e.target.dataset.meal].items[e.target.dataset.item].name = e.target.value; triggerSave(showToast); calculateMacros(); }
-export function updateItemAmount(e) { state.phaseData[state.currentPhase].meals[e.target.dataset.meal].items[e.target.dataset.item].amount = parseFloat(e.target.value)||0; triggerSave(showToast); calculateMacros(); }
-export function deleteItem(mIdx, iIdx) { state.phaseData[state.currentPhase].meals[mIdx].items.splice(iIdx, 1); triggerSave(showToast); loadPhase(state.currentPhase); }
-export function addItem(mIdx) { state.phaseData[state.currentPhase].meals[mIdx].items.push({name:'백미', amount:100}); triggerSave(showToast); loadPhase(state.currentPhase); }
-export function deleteMeal(mIdx) { if(confirm("이 일정을 삭제하시겠습니까?")) { state.phaseData[state.currentPhase].meals.splice(mIdx, 1); triggerSave(showToast); loadPhase(state.currentPhase); } }
+// ==========================================
+// 2. 일정 편집 및 복제 모달(Modal) 로직
+// ==========================================
+
+export function openEditMealModal(mIdx, isDuplicate) {
+    let meal;
+    if (mIdx !== null) {
+        meal = state.phases.find(p => p.id === state.currentPhaseId).meals[mIdx];
+    } else { // 새로운 빈 일정 추가
+        meal = { time: '12:00', label: '새 일정', color: 'sky', explain: '', supps: '', items: [] };
+    }
+    
+    state.editingMealState = { mIdx: mIdx, isDuplicate: isDuplicate, originalItems: meal.items || [] };
+    document.getElementById('edit-meal-title').innerText = (isDuplicate) ? "📋 일정 복제" : (mIdx === null ? "➕ 새 일정 추가" : "⚙️ 일정 수정");
+    document.getElementById('edit-meal-time').value = meal.time;
+    document.getElementById('edit-meal-label').value = meal.label;
+    document.getElementById('edit-meal-color').value = meal.color;
+    document.getElementById('edit-meal-explain').value = meal.explain || '';
+    document.getElementById('edit-meal-supps').value = meal.supps || '';
+
+    document.getElementById('edit-meal-modal').classList.remove('hidden'); document.getElementById('edit-meal-modal').classList.add('flex');
+}
+export function closeEditMealModal() { document.getElementById('edit-meal-modal').classList.add('hidden'); document.getElementById('edit-meal-modal').classList.remove('flex'); }
+export function saveEditMealModal() {
+    const time = document.getElementById('edit-meal-time').value;
+    const label = document.getElementById('edit-meal-label').value || '일정';
+    const color = document.getElementById('edit-meal-color').value;
+    const explain = document.getElementById('edit-meal-explain').value;
+    const supps = document.getElementById('edit-meal-supps').value;
+    
+    const cp = state.phases.find(p => p.id === state.currentPhaseId);
+    
+    if (state.editingMealState.mIdx === null || state.editingMealState.isDuplicate) {
+        // 복제이거나 새 일정 추가일 경우
+        const newObj = { id: 'm'+Date.now(), time: time, label: label, color: color, explain: explain, supps: supps, items: JSON.parse(JSON.stringify(state.editingMealState.originalItems)), isCollapsed: false };
+        cp.meals.push(newObj);
+        if(state.editingMealState.isDuplicate) showToast("일정이 수정되어 복제되었습니다.");
+        else showToast("새 일정이 추가되었습니다.");
+    } else {
+        // 기존 일정 수정일 경우
+        const meal = cp.meals[state.editingMealState.mIdx];
+        meal.time = time; meal.label = label; meal.color = color; meal.explain = explain; meal.supps = supps;
+        showToast("일정이 수정되었습니다.");
+    }
+    
+    cp.meals.sort((a,b) => a.time.localeCompare(b.time));
+    triggerSave(showToast); closeEditMealModal(); loadPhase(state.currentPhaseId);
+}
+
+// 기존 일정 타임라인 제어 함수 맵핑
+export function cycleColor(mIdx) { const colors = ['sky', 'emerald', 'amber', 'rose', 'violet', 'slate']; const cp = state.phases.find(p => p.id === state.currentPhaseId); const current = cp.meals[mIdx].color || 'sky'; cp.meals[mIdx].color = colors[(colors.indexOf(current) + 1) % colors.length]; triggerSave(showToast); loadPhase(state.currentPhaseId); }
+export function toggleCollapse(mIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].isCollapsed = !cp.meals[mIdx].isCollapsed; loadPhase(state.currentPhaseId); }
+export function updateMealField(mIdx, field, val) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx][field] = val; if(field==='time') cp.meals.sort((a,b) => a.time.localeCompare(b.time)); triggerSave(showToast); loadPhase(state.currentPhaseId); }
+export function updateItemName(mIdx, iIdx, val) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items[iIdx].name = val; triggerSave(showToast); calculateMacros(); }
+export function updateItemAmount(mIdx, iIdx, val) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items[iIdx].amount = parseFloat(val)||0; triggerSave(showToast); calculateMacros(); }
+export function deleteItem(mIdx, iIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items.splice(iIdx, 1); triggerSave(showToast); loadPhase(state.currentPhaseId); }
+export function addItem(mIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items.push({name:'백미', amount:100}); triggerSave(showToast); loadPhase(state.currentPhaseId); }
+export function deleteMeal(mIdx) { if(confirm("이 일정을 삭제하시겠습니까?")) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals.splice(mIdx, 1); triggerSave(showToast); loadPhase(state.currentPhaseId); } }
+
+// ==========================================
+// 3. 매크로 및 영양소 연산 로직
+// ==========================================
 
 export function calculateMacros() {
     let tC=0, tP=0, tF=0, tK=0; let cSrc={}, pSrc={}, fSrc={};
-    state.phaseData[state.currentPhase].meals.forEach(m => {
-        if(m.items) {
-            m.items.forEach(i => {
-                const db = state.foodDB[i.name];
-                if(db) { 
-                    let amt = i.amount || 0; let c=db.c*amt, p=db.p*amt, f=db.f*amt;
-                    tC+=c; tP+=p; tF+=f; tK+=db.k*amt; 
-                    if(c>0) cSrc[i.name] = (cSrc[i.name]||0) + c;
-                    if(p>0) pSrc[i.name] = (pSrc[i.name]||0) + p;
-                    if(f>0) fSrc[i.name] = (fSrc[i.name]||0) + f;
-                }
-            });
-        }
-    });
+    const cp = state.phases.find(p => p.id === state.currentPhaseId);
+    if(cp) {
+        cp.meals.forEach(m => {
+            if(m.items) {
+                m.items.forEach(i => {
+                    const db = state.foodDB[i.name];
+                    if(db) { 
+                        let amt = i.amount || 0; let c=db.c*amt, p=db.p*amt, f=db.f*amt;
+                        tC+=c; tP+=p; tF+=f; tK+=db.k*amt; 
+                        if(c>0) cSrc[i.name] = (cSrc[i.name]||0) + c;
+                        if(p>0) pSrc[i.name] = (pSrc[i.name]||0) + p;
+                        if(f>0) fSrc[i.name] = (fSrc[i.name]||0) + f;
+                    }
+                });
+            }
+        });
+    }
     
     let cKcal = tC * 4, pKcal = tP * 4, fKcal = tF * 9;
     let totCalc = cKcal + pKcal + fKcal;
@@ -136,9 +234,9 @@ export function calculateMacros() {
     document.getElementById('dash-fat').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-sky-400">${tF.toFixed(1)}g</span> <span class="text-sm sm:text-base text-sky-400/80 font-bold ml-1">(${fPct}%)</span>`;
     
     document.getElementById('sticky-kcal').innerText = Math.round(tK).toLocaleString(); 
-    document.getElementById('sticky-carbs').innerHTML = `${tC.toFixed(1)}g <span class="text-xs font-bold">(${cPct}%)</span>`; 
-    document.getElementById('sticky-protein').innerHTML = `${tP.toFixed(1)}g <span class="text-xs font-bold">(${pPct}%)</span>`; 
-    document.getElementById('sticky-fat').innerHTML = `${tF.toFixed(1)}g <span class="text-xs font-bold">(${fPct}%)</span>`;
+    document.getElementById('sticky-carbs').innerHTML = `${tC.toFixed(1)}g <span class="text-[10px] font-bold">(${cPct}%)</span>`; 
+    document.getElementById('sticky-protein').innerHTML = `${tP.toFixed(1)}g <span class="text-[10px] font-bold">(${pPct}%)</span>`; 
+    document.getElementById('sticky-fat').innerHTML = `${tF.toFixed(1)}g <span class="text-[10px] font-bold">(${fPct}%)</span>`;
     
     if (!state.pieChartInstance && !document.getElementById('tab-analysis').classList.contains('hidden')) { 
         state.pieChartInstance = new Chart(document.getElementById('chart-pie-macros').getContext('2d'), { 
@@ -151,28 +249,22 @@ export function calculateMacros() {
                     tooltip: {
                         titleFont: { size: 14 }, bodyFont: { size: 16, weight: 'bold' }, padding: 12,
                         callbacks: {
-                            label: function(context) {
-                                let label = context.label || ''; let val = context.raw || 0;
-                                let kcal = (label === '지방') ? val * 9 : val * 4;
-                                let totalK = (context.chart.data.datasets[0].data[0]*4) + (context.chart.data.datasets[0].data[1]*4) + (context.chart.data.datasets[0].data[2]*9);
-                                let pct = totalK > 0 ? Math.round((kcal/totalK)*100) : 0;
-                                return `${label}: ${val.toFixed(1)}g (${pct}%)`;
+                            label: function(ctx) {
+                                let val = ctx.raw || 0; let kcal = (ctx.label === '지방') ? val * 9 : val * 4;
+                                let pct = totCalc > 0 ? Math.round((kcal/totCalc)*100) : 0;
+                                return `${ctx.label}: ${val.toFixed(1)}g (${pct}%)`;
                             }
                         }
                     }
                 } 
             } 
         }); 
-    } else if (state.pieChartInstance) { 
-        state.pieChartInstance.data.datasets[0].data = [tC, tP, tF]; state.pieChartInstance.update(); 
-    }
+    } else if (state.pieChartInstance) { state.pieChartInstance.data.datasets[0].data = [tC, tP, tF]; state.pieChartInstance.update(); }
     renderAnalysisDetails(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, fSrc);
 }
 
 export function renderAnalysisDetails(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, fSrc) {
-    document.getElementById('src-total-c').innerText = `${tC.toFixed(1)}g (${cPct}%)`; 
-    document.getElementById('src-total-p').innerText = `${tP.toFixed(1)}g (${pPct}%)`; 
-    document.getElementById('src-total-f').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
+    document.getElementById('src-total-c').innerText = `${tC.toFixed(1)}g (${cPct}%)`; document.getElementById('src-total-p').innerText = `${tP.toFixed(1)}g (${pPct}%)`; document.getElementById('src-total-f').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
     const renderList = (srcObj, total, elId, colorCls) => {
         let html = ''; let sorted = Object.entries(srcObj).sort((a,b)=>b[1]-a[1]);
         sorted.forEach(([name, amt]) => {
@@ -216,22 +308,31 @@ export function switchMainTab(tabId) {
     if(tabId === 'tab-analysis') calculateMacros();
 }
 
-export function openAddMealModal() { document.getElementById('add-meal-modal').classList.remove('hidden'); document.getElementById('add-meal-modal').classList.add('flex'); }
-export function closeAddMealModal() { document.getElementById('add-meal-modal').classList.add('hidden'); document.getElementById('add-meal-modal').classList.remove('flex'); }
-export function confirmAddMeal() {
-    const time = document.getElementById('new-meal-time').value;
-    const type = document.getElementById('new-meal-type').value; 
-    const label = document.getElementById('new-meal-label').value || (type=='workout'?'새 훈련':(type=='supp'?'새 영양제':'새 식사')); 
-    const color = document.getElementById('new-meal-color').value;
-    const newObj = { id: 'm'+Date.now(), time: time, label: label, color: color, explain: '', items: [], isCollapsed: false };
-    state.phaseData[state.currentPhase].meals.push(newObj); state.phaseData[state.currentPhase].meals.sort((a,b) => a.time.localeCompare(b.time));
-    triggerSave(showToast); closeAddMealModal(); loadPhase(state.currentPhase);
-}
+// ==========================================
+// 4. 전역 프로필 및 DB 모달 기능
+// ==========================================
 
 export function openProfileModal() { document.getElementById('mod-weight-user').value=state.userInfo.weight; document.getElementById('mod-height').value=state.userInfo.height; document.getElementById('mod-bf').value=state.userInfo.targetBF; document.getElementById('mod-date').value=state.userInfo.targetDate; document.getElementById('profile-modal').classList.remove('hidden'); document.getElementById('profile-modal').classList.add('flex'); }
 export function closeProfileModal() { document.getElementById('profile-modal').classList.add('hidden'); document.getElementById('profile-modal').classList.remove('flex'); }
 export function saveProfileModal() { state.userInfo = { weight: parseFloat(document.getElementById('mod-weight-user').value)||72.5, height: parseFloat(document.getElementById('mod-height').value)||173, targetBF: parseFloat(document.getElementById('mod-bf').value)||4.0, targetDate: document.getElementById('mod-date').value }; closeProfileModal(); triggerSave(showToast); finishInit(); showToast("프로필 저장 완료."); }
 
+export function renderCustomSupps() {
+    const container = document.getElementById('custom-supp-list'); container.innerHTML = '';
+    state.customSupps.forEach((supp, idx) => {
+        container.innerHTML += `
+        <div class="bg-slate-900 border border-slate-700 p-5 rounded-xl relative">
+            <button onclick="window.removeCustomSupp(${idx})" class="absolute top-3 right-3 text-rose-500 text-sm font-bold hover:text-rose-400">✕ 삭제</button>
+            <input type="text" id="supp-name-${idx}" value="${supp.name}" placeholder="보충제 명칭" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white font-bold mb-4 focus:border-sky-500 outline-none text-base">
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <div class="flex items-center justify-between"><span class="text-slate-400">기준 중량(g)</span><input type="number" id="supp-wt-${idx}" value="${supp.weight}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                <div class="flex items-center justify-between"><span class="text-slate-400">총 Kcal</span><input type="number" id="supp-k-${idx}" value="${supp.kcal}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                <div class="flex items-center justify-between"><span class="text-amber-500">탄(g)</span><input type="number" step="0.1" id="supp-c-${idx}" value="${supp.carbs}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                <div class="flex items-center justify-between"><span class="text-emerald-500">단(g)</span><input type="number" step="0.1" id="supp-p-${idx}" value="${supp.protein}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+                <div class="flex items-center justify-between"><span class="text-sky-500">지(g)</span><input type="number" step="0.1" id="supp-f-${idx}" value="${supp.fat}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
+            </div>
+        </div>`;
+    });
+}
 export function openMacroModal() { renderCustomSupps(); document.getElementById('macro-modal').classList.remove('hidden'); document.getElementById('macro-modal').classList.add('flex'); }
 export function closeMacroModal() { document.getElementById('macro-modal').classList.add('hidden'); document.getElementById('macro-modal').classList.remove('flex'); }
 export function addCustomSuppForm() { state.customSupps.push({ id: Date.now(), name: '새 보충제', weight: 30, kcal: 120, carbs: 3, protein: 20, fat: 1.5 }); renderCustomSupps(); }
@@ -242,13 +343,16 @@ export function saveMacroModal() {
         let n = document.getElementById(`supp-name-${i}`).value || '보충제'+i;
         updatedSupps.push({ id: state.customSupps[i].id, name: n, weight: parseFloat(document.getElementById(`supp-wt-${i}`).value)||30, kcal: parseFloat(document.getElementById(`supp-k-${i}`).value)||0, carbs: parseFloat(document.getElementById(`supp-c-${i}`).value)||0, protein: parseFloat(document.getElementById(`supp-p-${i}`).value)||0, fat: parseFloat(document.getElementById(`supp-f-${i}`).value)||0 });
     }
-    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhase); showToast("보충제 가동 환경 변경 완료."); 
+    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 Database(데이터베이스) 가동 환경 변경 완료."); 
 }
 
-// 전역 이벤트 핸들러 바인딩 (HTML 인터페이스 상호 연동)
-window.switchMainTab = switchMainTab; window.loadPhase = loadPhase; window.cycleColor = cycleColor; window.toggleCollapse = toggleCollapse; window.duplicateMeal = duplicateMeal; window.deleteMeal = deleteMeal; window.updateMealField = updateMealField; window.updateItemName = updateItemName; window.updateItemAmount = updateItemAmount; window.addItem = addItem; window.deleteItem = deleteItem; window.openAddMealModal = openAddMealModal; window.closeAddMealModal = closeAddMealModal; window.confirmAddMeal = confirmAddMeal; window.openProfileModal = openProfileModal; window.closeProfileModal = closeProfileModal; window.saveProfileModal = saveProfileModal; window.openMacroModal = openMacroModal; window.closeMacroModal = closeMacroModal; window.saveMacroModal = saveMacroModal; window.addCustomSuppForm = addCustomSuppForm; window.removeCustomSupp = removeCustomSupp; window.runSmartCalc = runSmartCalc;
-window.exportData = () => exportDataJSON(showToast);
-window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("동기화 복원 성공."); }, () => showToast("비정상 백업 파일입니다."));
+// 전역 이벤트 바인딩
+window.switchMainTab = switchMainTab; window.loadPhase = loadPhase; window.cycleColor = cycleColor; window.toggleCollapse = toggleCollapse; window.updateMealField = updateMealField; window.updateItemName = updateItemName; window.updateItemAmount = updateItemAmount; window.addItem = addItem; window.deleteItem = deleteItem; window.deleteMeal = deleteMeal; 
+window.openPhaseModal = openPhaseModal; window.closePhaseModal = closePhaseModal; window.savePhaseModal = savePhaseModal; window.deletePhase = deletePhase; window.copyPhase = copyPhase; window.pastePhase = pastePhase;
+window.openEditMealModal = openEditMealModal; window.closeEditMealModal = closeEditMealModal; window.saveEditMealModal = saveEditMealModal;
+window.openProfileModal = openProfileModal; window.closeProfileModal = closeProfileModal; window.saveProfileModal = saveProfileModal; 
+window.openMacroModal = openMacroModal; window.closeMacroModal = closeMacroModal; window.saveMacroModal = saveMacroModal; window.addCustomSuppForm = addCustomSuppForm; window.removeCustomSupp = removeCustomSupp; window.runSmartCalc = runSmartCalc;
+window.exportData = () => exportDataJSON(showToast); window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("동기화 복원 성공."); }, () => showToast("비정상 백업 파일입니다."));
 
 window.addEventListener('scroll', function() {
     const stickyBar = document.getElementById('sticky-macro-bar');
