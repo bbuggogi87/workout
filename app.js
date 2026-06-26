@@ -1,8 +1,6 @@
 import { state, applyCustomSuppsToDB } from './store.js';
 import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON } from './services.js';
 
-let draggedMealIndex = null; // 드래그 앤 드롭 상태 관리 변수
-
 export function showToast(msg) { 
     const t = document.getElementById('toast'); 
     document.getElementById('toast-text').innerText = msg; 
@@ -19,18 +17,6 @@ export function finishInit() {
     runSmartCalc('carb'); runSmartCalc('pro'); runSmartCalc('fat');
 }
 
-// --- 드래그 앤 드롭 (순서 변경) 로직 ---
-export function dragStart(mIdx) { draggedMealIndex = mIdx; }
-export function drop(targetIdx) {
-    if (draggedMealIndex === null || draggedMealIndex === targetIdx) return;
-    const cp = state.phases.find(p => p.id === state.currentPhaseId);
-    const draggedItem = cp.meals.splice(draggedMealIndex, 1)[0];
-    cp.meals.splice(targetIdx, 0, draggedItem);
-    draggedMealIndex = null;
-    triggerSave(showToast); loadPhase(state.currentPhaseId);
-}
-
-// --- 탭(Phase) 및 타임라인 렌더링 로직 ---
 export function renderPhaseTabs() {
     const container = document.getElementById('phase-tabs-container'); container.innerHTML = '';
     state.phases.forEach(p => {
@@ -71,14 +57,14 @@ export function loadPhase(phaseId) {
             </div>`;
         });
 
-        // 드래그 앤 드롭 속성 추가 및 시간 입력창(w-[130px]) 확장 적용
+        // 텍스트 잘림 해결 (w-[110px]) 및 SortableJS 드래그 핸들(cursor-move) 적용
         container.innerHTML += `
-        <div class="relative transition-all duration-300 mb-6" draggable="true" ondragstart="window.dragStart(${mIdx})" ondragover="event.preventDefault();" ondrop="window.drop(${mIdx})">
-            <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="absolute -left-[35px] sm:-left-[58px] top-3 w-5 h-5 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow cursor-move" title="클릭시 색상 변경 / 길게 눌러 드래그시 순서 변경"></div>
+        <div class="relative transition-all duration-300 mb-6 meal-card-item">
+            <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="absolute -left-[35px] sm:-left-[58px] top-3 w-5 h-5 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow cursor-move" title="터치 및 드래그시 순서 변경"></div>
             <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-slate-800">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center cursor-pointer gap-3 sm:gap-0" onclick="window.toggleCollapse(${mIdx})">
                     <div class="flex items-center gap-2 sm:gap-4 w-full sm:w-auto" onclick="event.stopPropagation()">
-                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-xl sm:text-2xl outline-none w-[130px] shrink-0 p-0 tracking-tighter">
+                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="bg-transparent text-${meal.color}-400 font-black text-2xl outline-none w-[110px] shrink-0 p-0 tracking-tighter text-center">
                         <input type="text" onchange="window.updateMealField(${mIdx}, 'label', event.target.value)" value="${meal.label}" class="px-2 py-1 text-xs sm:text-sm font-bold uppercase bg-${meal.color}-500/10 text-${meal.color}-400 border border-${meal.color}-500/20 rounded-md outline-none flex-1 min-w-[100px] max-w-[200px]">
                     </div>
                     <div class="flex gap-2 items-center self-end sm:self-auto shrink-0" onclick="event.stopPropagation()">
@@ -98,9 +84,23 @@ export function loadPhase(phaseId) {
         </div>`;
     });
     calculateMacros();
+
+    // SortableJS 모바일 터치 드래그 초기화
+    if(window.timelineSortable) { window.timelineSortable.destroy(); }
+    window.timelineSortable = new Sortable(containerEl, {
+        handle: '.cursor-move',
+        animation: 150,
+        delay: 200, // 모바일 스크롤 구분을 위한 0.2초 딜레이
+        delayOnTouchOnly: true,
+        onEnd: function (evt) {
+            const cp = state.phases.find(p => p.id === state.currentPhaseId);
+            const movedItem = cp.meals.splice(evt.oldIndex, 1)[0];
+            cp.meals.splice(evt.newIndex, 0, movedItem);
+            triggerSave(showToast);
+        }
+    });
 }
 
-// --- 탭(Phase) 추가/수정/삭제/복사/붙여넣기 로직 ---
 export function openPhaseModal(isNew = false) {
     state.editingPhaseIsNew = isNew;
     if (isNew) { document.getElementById('phase-title').value = ''; document.getElementById('phase-desc').value = ''; } 
@@ -142,7 +142,6 @@ export function pastePhase() {
     }
 }
 
-// --- 개별 일정(Meal) 편집 및 기능 로직 (자동 정렬 해제됨) ---
 export function openEditMealModal(mIdx, isDuplicate) {
     let meal;
     if (mIdx !== null) meal = state.phases.find(p => p.id === state.currentPhaseId).meals[mIdx];
@@ -180,7 +179,6 @@ export function deleteItem(mIdx, iIdx) { const cp = state.phases.find(p => p.id 
 export function addItem(mIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items.push({name:'백미', amount:100}); triggerSave(showToast); loadPhase(state.currentPhaseId); }
 export function deleteMeal(mIdx) { if(confirm("이 일정을 삭제하시겠습니까?")) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals.splice(mIdx, 1); triggerSave(showToast); loadPhase(state.currentPhaseId); } }
 
-// --- 매크로 연산 및 차트 렌더링 ---
 export function calculateMacros() {
     let tC=0, tP=0, tF=0, tK=0; let cSrc={}, pSrc={}, fSrc={}; const cp = state.phases.find(p => p.id === state.currentPhaseId);
     if(cp) {
@@ -221,7 +219,6 @@ export function renderAnalysisDetails(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, 
     renderList(cSrc, tC, 'src-list-c', 'amber-500'); renderList(pSrc, tP, 'src-list-p', 'emerald-500'); renderList(fSrc, tF, 'src-list-f', 'sky-500');
 }
 
-// --- 스마트 매크로 변환기 로직 ---
 export function initCalcDropdowns() {
     const cDrop = document.getElementById('calc-carb-src'); const pDrop = document.getElementById('calc-pro-src'); const fDrop = document.getElementById('calc-fat-src');
     cDrop.innerHTML = ''; pDrop.innerHTML = ''; fDrop.innerHTML = ''; 
@@ -253,7 +250,6 @@ export function switchMainTab(tabId) {
     if(tabId === 'tab-analysis') calculateMacros();
 }
 
-// --- 프로필 및 보충제 데이터베이스(Database) 관리 로직 ---
 export function openProfileModal() { document.getElementById('mod-weight-user').value=state.userInfo.weight; document.getElementById('mod-height').value=state.userInfo.height; document.getElementById('mod-bf').value=state.userInfo.targetBF; document.getElementById('mod-date').value=state.userInfo.targetDate; document.getElementById('profile-modal').classList.remove('hidden'); document.getElementById('profile-modal').classList.add('flex'); }
 export function closeProfileModal() { document.getElementById('profile-modal').classList.add('hidden'); document.getElementById('profile-modal').classList.remove('flex'); }
 export function saveProfileModal() { state.userInfo = { weight: parseFloat(document.getElementById('mod-weight-user').value)||72.5, height: parseFloat(document.getElementById('mod-height').value)||173, targetBF: parseFloat(document.getElementById('mod-bf').value)||4.0, targetDate: document.getElementById('mod-date').value }; closeProfileModal(); triggerSave(showToast); finishInit(); showToast("프로필 저장 완료."); }
@@ -285,11 +281,9 @@ export function saveMacroModal() {
         let n = document.getElementById(`supp-name-${i}`).value || '보충제'+i;
         updatedSupps.push({ id: state.customSupps[i].id, name: n, weight: parseFloat(document.getElementById(`supp-wt-${i}`).value)||30, kcal: parseFloat(document.getElementById(`supp-k-${i}`).value)||0, carbs: parseFloat(document.getElementById(`supp-c-${i}`).value)||0, protein: parseFloat(document.getElementById(`supp-p-${i}`).value)||0, fat: parseFloat(document.getElementById(`supp-f-${i}`).value)||0 });
     }
-    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 가동 환경 변경 완료."); 
+    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 Database 가동 환경 변경 완료."); 
 }
 
-// --- 전역(Window) 이벤트 바인딩 ---
-window.dragStart = dragStart; window.drop = drop;
 window.switchMainTab = switchMainTab; window.loadPhase = loadPhase; window.cycleColor = cycleColor; window.toggleCollapse = toggleCollapse; window.updateMealField = updateMealField; window.updateItemName = updateItemName; window.updateItemAmount = updateItemAmount; window.addItem = addItem; window.deleteItem = deleteItem; window.deleteMeal = deleteMeal; 
 window.openPhaseModal = openPhaseModal; window.closePhaseModal = closePhaseModal; window.savePhaseModal = savePhaseModal; window.deletePhase = deletePhase; window.copyPhase = copyPhase; window.pastePhase = pastePhase;
 window.openEditMealModal = openEditMealModal; window.closeEditMealModal = closeEditMealModal; window.saveEditMealModal = saveEditMealModal;
@@ -297,7 +291,6 @@ window.openProfileModal = openProfileModal; window.closeProfileModal = closeProf
 window.openMacroModal = openMacroModal; window.closeMacroModal = closeMacroModal; window.saveMacroModal = saveMacroModal; window.addCustomSuppForm = addCustomSuppForm; window.removeCustomSupp = removeCustomSupp; window.runSmartCalc = runSmartCalc;
 window.exportData = () => exportDataJSON(showToast); window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("동기화 복원 성공."); }, () => showToast("비정상 백업 파일입니다."));
 
-// --- 스크롤 및 파이어베이스(Firebase) 부트스트랩 ---
 window.addEventListener('scroll', function() {
     const stickyBar = document.getElementById('sticky-macro-bar');
     if (window.scrollY > 350) { stickyBar.classList.remove('-translate-y-full', 'opacity-0', 'pointer-events-none'); stickyBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto'); } 
