@@ -1,6 +1,8 @@
 import { state, applyCustomSuppsToDB } from './store.js';
 import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON } from './services.js';
 
+let draggedMealIndex = null;
+
 export function showToast(msg) { 
     const t = document.getElementById('toast'); 
     document.getElementById('toast-text').innerText = msg; 
@@ -15,6 +17,16 @@ export function finishInit() {
     applyCustomSuppsToDB(); initCalcDropdowns();
     if(state.phases.length > 0) loadPhase(state.phases[0].id); 
     runSmartCalc('carb'); runSmartCalc('pro'); runSmartCalc('fat');
+}
+
+export function dragStart(mIdx) { draggedMealIndex = mIdx; }
+export function drop(targetIdx) {
+    if (draggedMealIndex === null || draggedMealIndex === targetIdx) return;
+    const cp = state.phases.find(p => p.id === state.currentPhaseId);
+    const draggedItem = cp.meals.splice(draggedMealIndex, 1)[0];
+    cp.meals.splice(targetIdx, 0, draggedItem);
+    draggedMealIndex = null;
+    triggerSave(showToast); loadPhase(state.currentPhaseId);
 }
 
 export function renderPhaseTabs() {
@@ -57,9 +69,8 @@ export function loadPhase(phaseId) {
             </div>`;
         });
 
-        // 드래그 핸들(동그라미)에 .drag-handle 클래스 부여 및 시간 입력창 너비(w-[140px] sm:w-[155px]) 대폭 확대 적용
         container.innerHTML += `
-        <div class="relative transition-all duration-300 mb-6">
+        <div class="relative transition-all duration-300 mb-6" draggable="true" ondragstart="window.dragStart(${mIdx})" ondragover="event.preventDefault();" ondrop="window.drop(${mIdx})">
             <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="drag-handle absolute -left-[35px] sm:-left-[58px] top-3 w-6 h-6 bg-${meal.color}-500 rounded-full border-4 border-slate-950 timeline-line-glow cursor-move flex items-center justify-center shadow-lg" title="클릭: 색상변경 / 드래그: 순서변경"></div>
             <div class="glass-panel p-4 sm:p-5 rounded-2xl border border-slate-800">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center cursor-pointer gap-3 sm:gap-0" onclick="window.toggleCollapse(${mIdx})">
@@ -85,22 +96,23 @@ export function loadPhase(phaseId) {
     });
     calculateMacros();
 
-    // 모바일 드래그 앤 드롭을 지원하는 SortableJS 초기화 적용
-    if (window.timelineSortable) { window.timelineSortable.destroy(); }
-    window.timelineSortable = new Sortable(document.getElementById('timeline-container'), {
-        handle: '.drag-handle', // 동그라미 아이콘으로만 드래그 가능
-        animation: 250,
-        ghostClass: 'opacity-50',
-        onEnd: function (evt) {
-            const oldIdx = evt.oldIndex; const newIdx = evt.newIndex;
-            if (oldIdx === newIdx) return;
-            const cp = state.phases.find(p => p.id === state.currentPhaseId);
-            const movedItem = cp.meals.splice(oldIdx, 1)[0];
-            cp.meals.splice(newIdx, 0, movedItem); // 바뀐 위치에 데이터 주입
-            triggerSave(showToast);
-            setTimeout(() => loadPhase(state.currentPhaseId), 10);
-        }
-    });
+    if (typeof Sortable !== 'undefined') {
+        if (window.timelineSortable) { window.timelineSortable.destroy(); }
+        window.timelineSortable = new Sortable(document.getElementById('timeline-container'), {
+            handle: '.drag-handle',
+            animation: 250,
+            ghostClass: 'opacity-50',
+            onEnd: function (evt) {
+                const oldIdx = evt.oldIndex; const newIdx = evt.newIndex;
+                if (oldIdx === newIdx) return;
+                const cp = state.phases.find(p => p.id === state.currentPhaseId);
+                const movedItem = cp.meals.splice(oldIdx, 1)[0];
+                cp.meals.splice(newIdx, 0, movedItem);
+                triggerSave(showToast);
+                setTimeout(() => loadPhase(state.currentPhaseId), 10);
+            }
+        });
+    }
 }
 
 export function openPhaseModal(isNew = false) {
@@ -134,13 +146,12 @@ export function copyPhase() {
 }
 export function pastePhase() {
     if (!state.clipboardMeals || state.clipboardMeals.length === 0) { showToast("복사된 식단 세트가 없습니다."); return; }
-    // 덮어쓰기 경고창 및 데이터 100% 교체 로직 적용
     if(confirm("⚠️ 붙여넣기를 진행하면 현재 탭의 기존 식단이 모두 지워집니다.\n정말 덮어쓰시겠습니까?")) {
         const cp = state.phases.find(p => p.id === state.currentPhaseId);
         const newMeals = state.clipboardMeals.map(m => {
             let cloned = JSON.parse(JSON.stringify(m)); cloned.id = 'm' + Date.now() + Math.floor(Math.random() * 1000); return cloned;
         });
-        cp.meals = newMeals; // 배열 완전 교체
+        cp.meals = newMeals;
         triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("식단 세트가 성공적으로 덮어쓰기 되었습니다.");
     }
 }
@@ -171,7 +182,6 @@ export function saveEditMealModal() {
         const meal = cp.meals[state.editingMealState.mIdx];
         meal.time = time; meal.label = label; meal.color = color; meal.explain = explain; meal.supps = supps; showToast("일정이 수정되었습니다.");
     }
-    // 수동 순서 정렬 유지를 위해 자동 시간순 정렬 제거
     triggerSave(showToast); closeEditMealModal(); loadPhase(state.currentPhaseId);
 }
 
@@ -289,7 +299,8 @@ export function saveMacroModal() {
     state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 가동 환경 변경 완료."); 
 }
 
-// 전역 윈도우 바인딩 영역 (Sortable 관련 함수는 내부로 이동되어 제거됨)
+// --- 전역 윈도우(Window) 바인딩 (치명적 오류 수정 완료 영역) ---
+window.dragStart = dragStart; window.drop = drop;
 window.switchMainTab = switchMainTab; window.loadPhase = loadPhase; window.cycleColor = cycleColor; window.toggleCollapse = toggleCollapse; window.updateMealField = updateMealField; window.updateItemName = updateItemName; window.updateItemAmount = updateItemAmount; window.addItem = addItem; window.deleteItem = deleteItem; window.deleteMeal = deleteMeal; 
 window.openPhaseModal = openPhaseModal; window.closePhaseModal = closePhaseModal; window.savePhaseModal = savePhaseModal; window.deletePhase = deletePhase; window.copyPhase = copyPhase; window.pastePhase = pastePhase;
 window.openEditMealModal = openEditMealModal; window.closeEditMealModal = closeEditMealModal; window.saveEditMealModal = saveEditMealModal;
