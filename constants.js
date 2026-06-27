@@ -1,6 +1,6 @@
 /**
  * 파일명: constants.js
- * 역할: 조리 후 실측 중량 기준 영양성분 마스터 데이터베이스
+ * 역할: 조리 후 실측 중량 기준 영양성분 마스터 데이터베이스 및 초기 식단 설정
  * 구조: 1g 당 수치로 환산 적용 (c: 탄수화물, p: 단백질, f: 지방, k: 킬로칼로리)
  */
 
@@ -68,13 +68,13 @@ export const INITIAL_PHASES = [
     { 
         id: 'p_1', title: '기본 베이스 식단', desc: '식단, 영양제, 훈련 일정을 자유롭게 배치하고 섭취 메모를 남겨보세요.', 
         meals: [
-            { id: 'm1', time: '12:00', label: '식사 1 (첫 식사)', color: 'sky', explain: '', supps: '[보충제 패키지 A]\n• 멀티비타민 2캡슐\n• OptiMSM 1.5g\n• CoQ10 100mg\n• 오메가-3 2캡슐', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:130}, {name:'아몬드', amount:15}], isWorkout: false, isCollapsed: false },
-            { id: 'm2', time: '17:00', label: '식사 2 (1차 분할)', color: 'amber', explain: '', supps: '[보충제 패키지 B]\n• 멀티비타민 1캡슐\n• OptiMSM 1.5g', items: [{name:'감자', amount:115}, {name:'닭가슴살', amount:75}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:130}], isWorkout: false, isCollapsed: false },
-            { id: 'm3', time: '19:00', label: '식사 2 (2차 분할)', color: 'emerald', explain: '', supps: '보충제 없음\n(훈련 전 위장 부담 최소화 및 복압 확보)', items: [{name:'감자', amount:115}, {name:'닭가슴살', amount:75}], isWorkout: false, isCollapsed: false },
+            { id: 'm1', time: '12:00', label: '식사 1 (첫 식사)', color: 'sky', explain: '', supps: '[보충제 패키지 A]\n• 멀티비타민 2캡슐\n• OptiMSM 1.5g\n• CoQ10 100mg\n• 오메가-3 2캡슐', items: [{name:'백미', amount:130}, {name:'닭가슴살(익힘)', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:130}, {name:'아몬드', amount:15}], isWorkout: false, isCollapsed: false },
+            { id: 'm2', time: '17:00', label: '식사 2 (1차 분할)', color: 'amber', explain: '', supps: '[보충제 패키지 B]\n• 멀티비타민 1캡슐\n• OptiMSM 1.5g', items: [{name:'감자(삶음)', amount:115}, {name:'닭가슴살(익힘)', amount:75}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:130}], isWorkout: false, isCollapsed: false },
+            { id: 'm3', time: '19:00', label: '식사 2 (2차 분할)', color: 'emerald', explain: '', supps: '보충제 없음\n(훈련 전 위장 부담 최소화 및 복압 확보)', items: [{name:'감자(삶음)', amount:115}, {name:'닭가슴살(익힘)', amount:75}], isWorkout: false, isCollapsed: false },
             { id: 'm4', time: '21:00', label: '고강도 웨이트 훈련', color: 'rose', explain: '오후 메인 본 운동 세션 인트라 아웃 워크아웃', supps: '', items: [], isWorkout: true, isCollapsed: false },
             { id: 'm5', time: '23:00', label: '훈련 직후 유산소', color: 'violet', explain: '체지방 4% 커팅 유산소 세션\n* 유산소 중 근손실 방지 완벽 방어', supps: '• EAA 1스쿱 (수분 500ml에 희석)', items: [], isWorkout: true, isCollapsed: false },
             { id: 'm6', time: '23:40', label: '포스트 워크아웃', color: 'sky', explain: '골격근 동화 창 오픈 타이밍\n* 유산소 완전히 끝난 직후 섭취', supps: '• 크레아틴 6g', items: [{name:'단백질 보충제', amount:30}], isWorkout: false, isCollapsed: false },
-            { id: 'm7', time: '01:00', label: '식사 3 (새벽 식사)', color: 'amber', explain: '', supps: '보충제 절대 금지\n(B군 각성 작용으로 인한 수면 방해 차단)', items: [{name:'백미', amount:130}, {name:'닭가슴살', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:130}], isWorkout: false, isCollapsed: false },
+            { id: 'm7', time: '01:00', label: '식사 3 (새벽 식사)', color: 'amber', explain: '', supps: '보충제 절대 금지\n(B군 각성 작용으로 인한 수면 방해 차단)', items: [{name:'백미', amount:130}, {name:'닭가슴살(익힘)', amount:150}, {name:'전란', amount:100}, {name:'야채(혼합)', amount:130}], isWorkout: false, isCollapsed: false },
             { id: 'm8', time: '03:00', label: '식사 4 (취침 전)', color: 'slate', explain: '', supps: '보충제 없음\n(깊은 수면 유도)', items: [{name:'블루베리', amount:100}, {name:'아몬드', amount:20}], isWorkout: false, isCollapsed: false }
         ] 
     },
