@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PREP MASTER PRO - Workout & Weight</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Pretendard:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Pretendard', 'Inter', sans-serif; background-color: #090D16; color: #F8FAFC; -webkit-tap-highlight-color: transparent; }
+        .glass-panel { background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); }
+        .active-day { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: #090D16; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4); }
+        
+        /* 숫자 입력창 기본 스피너 화살표 차단 */
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none !important; margin: 0 !important; }
+        input[type="number"] { -moz-appearance: textfield !important; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.3); border-radius: 10px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="antialiased min-h-screen custom-scrollbar relative">
+
+<div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-none shadow-2xl">
+    <div class="glass-panel px-5 py-4 rounded-2xl flex items-center gap-3 border-amber-500/50">
+        <span class="w-3 h-3 bg-amber-500 rounded-full animate-ping flex-shrink-0"></span>
+        <p class="text-sm font-bold text-white break-keep" id="toast-text">알림 메시지</p>
+    </div>
+</div>
+
+<div id="timer-floating-bar" class="fixed top-0 left-0 w-full z-40 transform -translate-y-full opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="glass-panel mx-auto max-w-7xl px-4 py-3 flex justify-between items-center border-b border-amber-500/30 bg-[#090D16]/95 shadow-2xl">
+        <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>
+            <span class="text-sm font-black tracking-wider text-amber-500 uppercase">REST TIMER</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="timer-countdown-display" class="text-xl font-black text-white tracking-widest">00:00</span>
+            <button onclick="window.stopRestTimer()" class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 font-bold transition-colors">패스</button>
+        </div>
+    </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 min-h-[90vh]">
+    <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6 border-b border-slate-800/60 pb-6">
+        <div class="flex-1 w-full">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+                <span class="px-3 py-1 text-[11px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">WORKOUT & WEIGHT</span>
+                <span id="badge-dday" class="px-3 py-1 text-[11px] font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full">D-Day 연산 중</span>
+                <span id="cloud-status-workout" class="px-3 py-1 text-[11px] font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> 시스템 동기화 중</span>
+            </div>
+            <h1 class="text-4xl sm:text-5xl font-black text-white">TRAINING <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-rose-400">TRACKER</span></h1>
+            <div class="flex flex-wrap gap-2 mt-4">
+                <a href="index.html" class="px-4 py-2.5 text-xs font-bold bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 rounded-xl border border-sky-700/40 transition-colors flex items-center gap-1.5">🥑 식단 플래너 이동</a>
+                <button onclick="window.openTemplateManager()" class="px-3 py-2 text-xs font-bold bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors">📋 루틴 프리셋 관리</button>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-2 sm:gap-4 glass-panel p-4 sm:p-5 rounded-2xl border-slate-800/50 w-full lg:w-auto shrink-0">
+            <div class="text-center px-2 border-r border-slate-800">
+                <p class="text-slate-500 text-[10px] sm:text-xs font-bold uppercase mb-1">체중</p>
+                <input type="number" step="0.1" id="input-daily-weight" class="w-full bg-transparent text-center text-lg sm:text-xl font-extrabold text-amber-400 outline-none focus:text-white" value="0.0">
+                <span class="text-[10px] text-slate-500">kg</span>
+            </div>
+            <div class="text-center px-2 border-r border-slate-800">
+                <p class="text-slate-500 text-[10px] sm:text-xs font-bold uppercase mb-1">체지방률</p>
+                <input type="number" step="0.1" id="input-daily-bf" class="w-full bg-transparent text-center text-lg sm:text-xl font-extrabold text-slate-200 outline-none focus:text-white" value="0.0">
+                <span class="text-[10px] text-slate-500">%</span>
+            </div>
+            <div class="text-center px-2">
+                <p class="text-slate-500 text-[10px] sm:text-xs font-bold uppercase mb-1">골격근량</p>
+                <input type="number" step="0.1" id="input-daily-smm" class="w-full bg-transparent text-center text-lg sm:text-xl font-extrabold text-slate-200 outline-none focus:text-white" value="0.0">
+                <span class="text-[10px] text-slate-500">kg</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-24">
+        <div class="lg:col-span-5 space-y-4">
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 shadow-xl">
+                <div class="flex justify-between items-center mb-4 px-1">
+                    <button onclick="window.moveMonth(-1)" class="p-2 text-slate-400 hover:text-white text-sm transition-colors">◀</button>
+                    <h2 id="calendar-month-year" class="text-base sm:text-lg font-black tracking-tight text-slate-200">2026년 06월</h2>
+                    <button onclick="window.moveMonth(1)" class="p-2 text-slate-400 hover:text-white text-sm transition-colors">▶</button>
+                </div>
+                <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-slate-500 mb-2">
+                    <div class="text-rose-500">Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div class="text-sky-500">Sat</div>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1">
+                    </div>
+            </div>
+            
+            <div class="glass-panel p-4 rounded-2xl border border-slate-800 shadow-xl">
+                <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">🧮 원판 조합 계산기</h3>
+                <div class="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl p-2.5">
+                    <span class="text-xs font-bold text-slate-400 shrink-0">목표 총중량</span>
+                    <input type="number" id="plate-calc-target" value="100" class="w-full bg-transparent text-right font-black text-amber-400 text-lg outline-none pr-1">
+                    <span class="text-sm text-slate-500 font-bold shrink-0">kg</span>
+                    <button onclick="window.runPlateCalculate()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black px-3 py-2 rounded-lg transition-colors shrink-0">계산</button>
+                </div>
+                <div id="plate-calc-result" class="mt-2 text-xs font-bold text-slate-300 bg-slate-900/40 border border-slate-800/80 rounded-xl p-3 min-h-[40px] flex items-center justify-center break-keep text-center">
+                    바벨 양옆에 장착할 원판 조합이 여기에 출력됩니다.
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-7 space-y-4">
+            <div class="glass-panel p-5 rounded-2xl border border-slate-800 shadow-xl">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4 mb-4">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-100 flex items-center gap-2">
+                            <span id="label-selected-date" class="text-amber-400">YYYY-MM-DD</span> 훈련 일지
+                        </h2>
+                        <p id="label-total-volume" class="text-xs text-slate-400 font-medium mt-0.5 uppercase tracking-wide">오늘의 총 훈련 볼륨: 0 kg</p>
+                    </div>
+                    <button onclick="window.showExerciseSelectorModal()" class="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-lg shadow-amber-500/10 transition-colors flex items-center justify-center gap-1">
+                        ＋ 새 운동 추가
+                    </button>
+                </div>
+
+                <div id="workout-list-container" class="space-y-4 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+                    </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="exercise-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 backdrop-blur-sm px-4">
+    <div class="glass-panel p-5 sm:p-6 rounded-3xl w-full max-w-lg animate-fade-in border border-amber-500/30 shadow-2xl">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-black text-white">🏋️ 운동 종목 선택 라이브러리</h3>
+            <button onclick="window.closeExerciseSelectorModal()" class="text-slate-400 hover:text-white font-black text-sm">✕</button>
+        </div>
+        
+        <div id="modal-part-tabs" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-3 border-b border-slate-800">
+            </div>
+
+        <div id="modal-type-tabs" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-4">
+            </div>
+
+        <div id="modal-exercise-items" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto custom-scrollbar pr-1 mb-5">
+            </div>
+        
+        <button onclick="window.closeExerciseSelectorModal()" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-bold text-slate-300 transition-colors">닫기</button>
+    </div>
+</div>
+
+<div id="template-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 backdrop-blur-sm px-4">
+    <div class="glass-panel p-6 rounded-3xl w-full max-w-md animate-fade-in border border-slate-800 shadow-2xl">
+        <h3 class="text-lg font-black text-white mb-4">📋 나만의 맞춤 루틴 루프</h3>
+        <div id="template-list-box" class="space-y-3 max-h-60 overflow-y-auto custom-scrollbar pr-1 mb-6">
+            </div>
+        <div class="flex gap-2">
+            <button onclick="window.saveCurrentToTemplate()" class="flex-1 py-3 text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl hover:bg-amber-500/20 transition-colors">현재 구성을 프리셋으로 저장</button>
+            <button onclick="window.closeTemplateManager()" class="py-3 px-4 text-xs font-bold bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors">닫기</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="calendar.js"></script>
+
+<footer class="mt-8 pb-8 text-center text-slate-600 text-[11px] px-4 border-t border-slate-900 pt-6">
+    <p>훈련 볼륨 자동 연산, 바벨 원판 수치 및 최고 중량 예측 수치는 단순 수학적 수식에 기반한 통계 기준 근사치이므로 정확하지 않을 수 있기 때문에 사용 시 확인이 필요합니다.</p>
+</footer>
+
+</body>
+</html>
