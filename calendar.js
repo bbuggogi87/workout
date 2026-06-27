@@ -1,6 +1,6 @@
 /**
  * 파일명: calendar.js
- * 역할: 전역 탭 이동, 운동 기록, 차트 연산 등 모든 비즈니스 로직 통제
+ * 역할: 전역 탭 이동, 운동 기록, 차트 연산, 스페이스 무시 초성검색 등 기능 총괄 (GitHub Pages 최적화)
  */
 
 import { state } from './store.js';
@@ -15,6 +15,42 @@ let activeModalType = '프리웨이트/맨몸';
 let libraryActivePart = '가슴';
 let undoBuffer = null;
 
+// ==========================================
+// 0. 전역 글로벌 네임스페이스 최우선 바인딩 
+// (GitHub Pages 로딩 지연으로 인한 onclick 오류 원천 차단)
+// ==========================================
+window.switchCalendarTab = switchCalendarTab;
+window.runLibrarySearchFilter = runLibrarySearchFilter;
+window.injectLibraryToToday = injectLibraryToToday;
+window.triggerSettingExport = triggerSettingExport;
+window.triggerSettingImport = triggerSettingImport;
+window.triggerClearAllWorkoutData = triggerClearAllWorkoutData;
+window.applyDirectPresetRoutine = applyDirectPresetRoutine;
+window.triggerQuickInputFAB = triggerQuickInputFAB;
+window.closeQuickInputFABModal = closeQuickInputFABModal;
+window.saveQuickInputFABModal = saveQuickInputFABModal;
+window.triggerQuickVoiceSimulation = triggerQuickVoiceSimulation;
+window.exportWorkoutToCSV = exportWorkoutToCSV;
+window.openTemplateManager = openTemplateManager;
+window.closeTemplateManager = closeTemplateManager;
+window.saveCurrentToTemplate = saveCurrentToTemplate;
+window.applyTemplate = applyTemplate;
+window.deleteTemplate = deleteTemplate;
+window.moveMonth = moveMonth;
+window.runPlateCalculate = runPlateCalculate;
+window.showExerciseSelectorModal = showExerciseSelectorModal;
+window.closeExerciseSelectorModal = closeExerciseSelectorModal;
+window.stopRestTimer = stopRestTimer;
+window.renderWorkoutList = renderWorkoutList;
+window.addSet = addSet;
+window.deleteSet = deleteSet;
+window.adjSetVal = adjSetVal;
+window.changeSetField = changeSetField;
+window.toggleSetComplete = toggleSetComplete;
+window.deleteExercise = deleteExercise;
+window.selectWorkoutDate = selectWorkoutDate;
+
+// 1. 시스템 편의 기능: 알림 토스트 및 오디오 
 export function showToast(msg) {
     const t = document.getElementById('toast');
     document.getElementById('toast-text').innerText = msg;
@@ -24,7 +60,23 @@ export function showToast(msg) {
     }, 2500);
 }
 
-// 1. 네비게이션 탭 스위치
+// [신규 편의기능] 타이머 종료 시 네이티브 비프음 발생 (웹 오디오 API 활용)
+function playTimerBeep() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 음계
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+    } catch(e) { console.warn("오디오 플레이 불가 환경"); }
+}
+
+// 2. 상단 네비게이션 탭 스위치
 export function switchCalendarTab(tabId) {
     document.querySelectorAll('.calendar-pane').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.calendar-pane').forEach(el => el.classList.remove('block'));
@@ -50,7 +102,7 @@ export function switchCalendarTab(tabId) {
     if (tabId === 'tab-library') runLibrarySearchFilter();
 }
 
-// 2. 홈 화면 업데이트
+// 3. 홈 화면 위젯 
 function updateHomeDashboardWidgets() {
     const data = state.workouts[state.selectedDateStr];
     const routineTitle = document.getElementById('home-routine-title');
@@ -102,7 +154,7 @@ function updateHomeDashboardWidgets() {
     });
 }
 
-// 3. 기록 탭: 달력 연산 
+// 4. 달력 및 계측 제어 로직
 export function calculateWorkoutDDay() {
     const target = new Date(state.userInfo.targetDate || '2026-07-18');
     const today = new Date();
@@ -176,7 +228,7 @@ export function selectWorkoutDate(dateStr) {
     renderWorkoutList();
 }
 
-// 4. 기록 탭: 리스트 제어 (1RM, 주관적 운동 강도(RPE) 반영)
+// 5. 훈련 기록지 로직 및 세트 복사 기능
 export function renderWorkoutList() {
     const container = document.getElementById('workout-list-container');
     if(!container) return;
@@ -231,7 +283,7 @@ export function renderWorkoutList() {
                 <div>
                     <span class="px-2 py-0.5 text-[10px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md">${ex.part} · ${ex.type}</span>
                     <h3 class="text-sm font-black text-white mt-1">${ex.name}</h3>
-                    <p class="text-[10px] text-slate-400 mt-0.5 font-medium">1회 최대 반복 중량(1RM) 예측: ${max1RM > 0 ? max1RM.toFixed(1) + 'kg' : '---'}</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5 font-medium">Estimated 1RM: ${max1RM > 0 ? max1RM.toFixed(1) + 'kg' : '---'}</p>
                 </div>
                 <button onclick="window.deleteExercise(${exIdx})" class="text-[11px] px-2 py-1 bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-rose-400 rounded-md transition-colors font-bold">삭제</button>
             </div>
@@ -260,7 +312,7 @@ export function deleteSet(exIdx, setIdx) {
     const ex = state.workouts[state.selectedDateStr].exercises[exIdx];
     undoBuffer = { type: 'set', exIdx: exIdx, setIdx: setIdx, data: JSON.parse(JSON.stringify(ex.sets[setIdx])) };
     ex.sets.splice(setIdx, 1);
-    triggerSave(); renderWorkoutList(); triggerUndoToast("기록 삭제됨.");
+    triggerSave(); renderWorkoutList(); triggerUndoToast("기록이 삭제되었습니다.");
 }
 
 export function adjSetVal(exIdx, setIdx, field, delta) {
@@ -284,6 +336,7 @@ export function toggleSetComplete(exIdx, setIdx, isChecked) {
     if (isChecked) startRestTimer(90);
 }
 
+// 6. 타이머 제어 및 스마트 Undo
 export function startRestTimer(seconds) {
     if (restTimerInterval) clearInterval(restTimerInterval);
     const bar = document.getElementById('timer-floating-bar');
@@ -298,7 +351,8 @@ export function startRestTimer(seconds) {
         if (remain <= 0) {
             clearInterval(restTimerInterval);
             bar.className = "fixed top-14 left-0 w-full z-40 transform -translate-y-full opacity-0 transition-all duration-300 pointer-events-none";
-            showToast("휴식 종료.");
+            showToast("휴식 시간이 종료되었습니다.");
+            playTimerBeep(); // 비프음 실행 (모바일 환경 호환)
         } else { display.textContent = formatTime(remain); }
     }, 1000);
 }
@@ -328,7 +382,7 @@ function triggerUndoToast(msg) {
     }, 5000);
 }
 
-// 5. 모달 제어
+// 7. 종목 선택 모달 라이브러리 연동
 export function showExerciseSelectorModal() {
     document.getElementById('exercise-modal').classList.remove('hidden');
     document.getElementById('exercise-modal').classList.add('flex');
@@ -363,7 +417,7 @@ function renderModalTabs() {
             const data = state.workouts[state.selectedDateStr];
             if (!data.exercises.some(e => e.name === name)) {
                 data.exercises.push({ part: activeModalPart, type: activeModalType, name: name, sets: [] });
-                triggerSave(); closeExerciseSelectorModal(); renderWorkoutList(); showToast("추가 완료.");
+                triggerSave(); closeExerciseSelectorModal(); renderWorkoutList(); showToast("종목 추가 완료.");
             } else { showToast("이미 등록된 종목입니다."); }
         };
         itemContainer.appendChild(btn);
@@ -376,7 +430,7 @@ export function deleteExercise(exIdx) {
     }
 }
 
-// 6. 계산기 및 루틴 프리셋 제어
+// 8. 바벨 원판 계산기 및 프리셋 관리
 export function runPlateCalculate() {
     const totalWeight = parseFloat(document.getElementById('plate-calc-target').value) || 0;
     const resultBox = document.getElementById('plate-calc-result');
@@ -411,7 +465,7 @@ function renderTemplateList() {
         const div = document.createElement('div');
         div.className = "flex items-center justify-between p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs";
         div.innerHTML = `
-            <span onclick="window.applyTemplate(${tmpl.id})" class="text-slate-200 font-bold hover:text-amber-400 cursor-pointer flex-1 truncate">${tmpl.title} (${tmpl.exercises.length}개 종목)</span>
+            <span onclick="window.applyTemplate(${tmpl.id})" class="text-slate-200 font-bold hover:text-amber-400 cursor-pointer flex-1 truncate">${tmpl.title} (${tmpl.exercises.length}종목)</span>
             <button onclick="window.deleteTemplate(${tmpl.id})" class="text-rose-400 hover:text-rose-500 font-bold ml-2">삭제</button>
         `;
         box.appendChild(div);
@@ -423,6 +477,7 @@ export function saveCurrentToTemplate() {
     const title = prompt("루틴 프리셋 명칭을 입력하세요:", "새 맞춤 루틴");
     if (!title) return;
     const cleanedExercises = currentExs.map(ex => ({ part: ex.part, type: ex.type, name: ex.name, sets: ex.sets.map(s => ({ type: s.type, weight: s.weight, reps: s.reps, memo: s.memo, done: false })) }));
+    if (!state.templates) state.templates = [];
     state.templates.push({ id: Date.now(), title: title, exercises: cleanedExercises });
     triggerSave(); renderTemplateList(); showToast("프리셋 백업 완료.");
 }
@@ -444,7 +499,7 @@ export function renderRoutinePresetsPane() {
     if(!box) return; box.innerHTML = '';
     const defaultPresets = [
         { title: "3분할 - 가슴/어깨", exNames: ["플랫 바벨 벤치프레스", '덤벨 숄더 프레스', '사이드 레터럴 레이즈'] },
-        { title: "3분할 - 등/이두", exNames: ["랫풀다운 머신", '바벨 로우 (벤트오버 로우)', '바벨 컬'] },
+        { title: "3분할 - 등/이두", exNames: ["렛풀다운 머신", '바벨 로우 (벤트오버 로우)', '바벨 컬'] },
         { title: "3분할 - 하체/삼두", exNames: ["백 스쿼트", '레그 익스텐션', '트라이셉스 푸시다운 (바/로프)'] }
     ];
     defaultPresets.forEach(p => {
@@ -453,7 +508,7 @@ export function renderRoutinePresetsPane() {
         card.innerHTML = `
             <h4 class="text-sm font-black text-white">${p.title}</h4>
             <p class="text-[11px] text-slate-400 truncate">${p.exNames.join(', ')}</p>
-            <button onclick="window.applyDirectPresetRoutine(['${p.exNames.join("','")}'])" class="w-full py-2 bg-slate-800 text-xs text-amber-400 border border-slate-700 rounded-lg font-bold">이 루틴 불러와 적용</button>
+            <button onclick="window.applyDirectPresetRoutine(['${p.exNames.join("','")}'])" class="w-full py-2 bg-slate-800 text-xs text-amber-400 border border-slate-700 rounded-lg font-bold transition-colors hover:bg-slate-700">이 루틴 적용하기</button>
         `;
         box.appendChild(card);
     });
@@ -461,11 +516,15 @@ export function renderRoutinePresetsPane() {
 export function applyDirectPresetRoutine(namesArray) {
     if(!confirm("기존 기록이 대체됩니다. 진행할까요?")) return;
     const data = state.workouts[state.selectedDateStr];
-    data.exercises = namesArray.map(name => ({ part: '전신', type: '기타', name: name, sets: [{type:'일반', weight:40, reps:10, done:false}] }));
+    data.exercises = namesArray.map(name => {
+        let fPart = '전신', fType = '기타';
+        Object.entries(WORKOUT_DB).forEach(([p, types]) => Object.entries(types).forEach(([t, nList]) => { if(nList.includes(name)) { fPart = p; fType = t; } }));
+        return { part: fPart, type: fType, name: name, sets: [{type:'일반', weight:40, reps:10, done:false}] };
+    });
     triggerSave(); switchCalendarTab('tab-record'); showToast("프리셋 적용 완료.");
 }
 
-// 7. 라이브러리 및 빠른 기록(플로팅 액션 버튼(FAB: Floating Action Button)) 제어
+// 9. 라이브러리 초성 검색 (띄어쓰기 완전 무시 알고리즘 반영) 및 FAB
 function getHangulChosung(str) {
     const cho = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
     let result = "";
@@ -477,7 +536,10 @@ function getHangulChosung(str) {
     return result;
 }
 export function runLibrarySearchFilter() {
-    const input = document.getElementById('library-search-input').value.trim().toLowerCase();
+    // 사용자가 입력한 검색어에서 모든 공백 제거
+    const rawInput = document.getElementById('library-search-input').value.trim().toLowerCase();
+    const input = rawInput.replace(/\s+/g, ''); 
+    
     const grid = document.getElementById('library-master-card-grid');
     grid.innerHTML = '';
 
@@ -501,8 +563,12 @@ export function runLibrarySearchFilter() {
         if (libraryActivePart !== '전체' && part !== libraryActivePart) return;
         Object.entries(types).forEach(([type, names]) => {
             names.forEach(name => {
-                const chosung = getHangulChosung(name).toLowerCase();
-                if (input && !(name.toLowerCase().includes(input) || chosung.includes(input))) return;
+                // 원본 문자열에서 공백 제거 후 비교 (띄어쓰기 예외 처리)
+                const cleanName = name.toLowerCase().replace(/\s+/g, '');
+                const chosung = getHangulChosung(name).toLowerCase().replace(/\s+/g, '');
+                
+                if (input && !(cleanName.includes(input) || chosung.includes(input))) return;
+                
                 const card = document.createElement('div');
                 card.className = "p-4 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center";
                 card.innerHTML = `
@@ -539,16 +605,27 @@ export function saveQuickInputFABModal() {
     const data = state.workouts[state.selectedDateStr];
     let targetEx = data.exercises.find(e => e.name === name);
     if (!targetEx) {
-        targetEx = { part: '기타', type: '기타', name: name, sets: [] };
+        let fPart = '기타', fType = '기타';
+        Object.entries(WORKOUT_DB).forEach(([p, types]) => Object.entries(types).forEach(([t, nList]) => { if(nList.includes(name)) { fPart = p; fType = t; } }));
+        targetEx = { part: fPart, type: fType, name: name, sets: [] };
         data.exercises.push(targetEx);
     }
-    targetEx.sets.push({ type: '일반', weight: w, reps: r, memo: '빠른 기록', done: true });
+    targetEx.sets.push({ type: '일반', weight: w, reps: r, memo: 'FAB 기록', done: true });
     triggerSave(); closeQuickInputFABModal();
     if(document.getElementById('pane-tab-record').classList.contains('block')) renderWorkoutList();
     showToast("신속 등록 완료.");
 }
+export function triggerQuickVoiceSimulation() {
+    showToast("🎙️ 음성 인식 중...");
+    setTimeout(() => {
+        document.getElementById('quick-select-ex-name').value = "플랫 바벨 벤치프레스";
+        document.getElementById('quick-input-weight').value = 80;
+        document.getElementById('quick-input-reps').value = 8;
+        showToast("인식 성공: 매핑 완료.");
+    }, 1500);
+}
 
-// 8. 설정 및 통계 (Chart.js / JSON / CSV 입출력)
+// 10. 통계 차트 (지연 렌더링을 통한 디스플레이 충돌 버그 해결)
 let workoutChartInstance = null;
 function renderWorkoutAnalysisCharts() {
     const canvas = document.getElementById('chart-workout-analysis');
@@ -573,15 +650,18 @@ function renderWorkoutAnalysisCharts() {
     document.getElementById('stat-card-volume').innerText = `${totalVol.toLocaleString()} kg`;
     document.getElementById('stat-card-days').innerText = `${totalDays} 일`;
 
-    if(workoutChartInstance) workoutChartInstance.destroy();
-    workoutChartInstance = new Chart(canvas.getContext('2d'), {
-        type: 'radar',
-        data: {
-            labels: Object.keys(partsCount),
-            datasets: [{ data: Object.values(partsCount), backgroundColor: 'rgba(245,158,11,0.15)', borderColor: '#F59E0B', borderWidth: 2, pointBackgroundColor: '#F59E0B' }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { r: { grid: { color: 'rgba(255,255,255,0.05)' }, angleLines: { color: 'rgba(255,255,255,0.05)' }, pointLabels: { color: '#94A3B8' }, ticks: { display: false } } } }
-    });
+    // 탭이 화면에 그려진 후(Display Block) 캔버스의 너비/높이가 할당될 시간을 벌어줍니다.
+    setTimeout(() => {
+        if(workoutChartInstance) workoutChartInstance.destroy();
+        workoutChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'radar',
+            data: {
+                labels: Object.keys(partsCount),
+                datasets: [{ data: Object.values(partsCount), backgroundColor: 'rgba(245,158,11,0.15)', borderColor: '#F59E0B', borderWidth: 2, pointBackgroundColor: '#F59E0B' }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { r: { grid: { color: 'rgba(255,255,255,0.05)' }, angleLines: { color: 'rgba(255,255,255,0.05)' }, pointLabels: { color: '#94A3B8' }, ticks: { display: false } } } }
+        });
+    }, 50);
 }
 
 export function exportWorkoutToCSV() {
@@ -601,7 +681,6 @@ export function exportWorkoutToCSV() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
     showToast("CSV 다운로드가 활성화되었습니다.");
 }
-
 export function triggerSettingExport() { exportDataJSON(showToast); }
 export function triggerSettingImport(e) {
     importDataJSON(e.target.files[0], () => { showToast("복원 완료."); switchCalendarTab('tab-home'); }, () => showToast("오류 발생."));
@@ -612,37 +691,7 @@ export function triggerClearAllWorkoutData() {
     }
 }
 
-// 9. 글로벌 바인딩
-window.switchCalendarTab = switchCalendarTab;
-window.runLibrarySearchFilter = runLibrarySearchFilter;
-window.injectLibraryToToday = injectLibraryToToday;
-window.triggerSettingExport = triggerSettingExport;
-window.triggerSettingImport = triggerSettingImport;
-window.triggerClearAllWorkoutData = triggerClearAllWorkoutData;
-window.applyDirectPresetRoutine = applyDirectPresetRoutine;
-window.triggerQuickInputFAB = triggerQuickInputFAB;
-window.closeQuickInputFABModal = closeQuickInputFABModal;
-window.saveQuickInputFABModal = saveQuickInputFABModal;
-window.exportWorkoutToCSV = exportWorkoutToCSV;
-window.openTemplateManager = openTemplateManager;
-window.closeTemplateManager = closeTemplateManager;
-window.saveCurrentToTemplate = saveCurrentToTemplate;
-window.applyTemplate = applyTemplate;
-window.deleteTemplate = deleteTemplate;
-window.moveMonth = moveMonth;
-window.runPlateCalculate = runPlateCalculate;
-window.showExerciseSelectorModal = showExerciseSelectorModal;
-window.closeExerciseSelectorModal = closeExerciseSelectorModal;
-window.stopRestTimer = stopRestTimer;
-window.renderWorkoutList = renderWorkoutList;
-window.addSet = addSet;
-window.deleteSet = deleteSet;
-window.adjSetVal = adjSetVal;
-window.changeSetField = changeSetField;
-window.toggleSetComplete = toggleSetComplete;
-window.deleteExercise = deleteExercise;
-
-// 10. 초기화
+// 11. 최종 초기화 및 시스템 마운트
 function initMetricsChangeEvents() {
     const updateMetricsData = () => {
         const dStr = state.selectedDateStr;
@@ -656,21 +705,21 @@ function initMetricsChangeEvents() {
     document.getElementById('input-daily-bf').oninput = updateMetricsData;
     document.getElementById('input-daily-smm').oninput = updateMetricsData;
 }
-
 initMetricsChangeEvents();
 
 initializeFirebase((success) => {
     const statusEl = document.getElementById('cloud-status-workout');
     if (statusEl) {
-        if (success) statusEl.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full"></span> 정상 연동';
+        if (success) statusEl.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> 정상 연동';
         else statusEl.innerHTML = '<span class="w-2 h-2 bg-sky-500 rounded-full"></span> 로컬 모드';
     }
     calculateWorkoutDDay();
     const today = new Date();
     viewYear = today.getFullYear();
     viewMonth = today.getMonth();
+    
     selectWorkoutDate(`${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
     
-    // [핵심 변경] 초기 세팅 완료 후 무조건 '홈' 탭을 강제 포커싱
+    // 로딩 시 홈 탭 강제 포커싱
     switchCalendarTab('tab-home');
 });
