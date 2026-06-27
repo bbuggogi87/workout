@@ -1,6 +1,6 @@
 /**
  * 파일명: calendar.js
- * 역할: 데이터 추출 무결성, 개별 휴식 타이머(소리 포함), 통계 고도화 총괄 컨트롤러
+ * 역할: 알람 반복 속도 유저 커스텀 적용 및 전역 모듈 통제
  */
 
 import { state } from './store.js';
@@ -16,12 +16,8 @@ let undoBuffer = null;
 let currentTimerSeconds = 0;
 let currentAlarmSound = '1';
 
-let chartBalance = null;
-let chartVolume = null;
-let chartWeight = null;
-
 // ==========================================
-// 전역 글로벌 바인딩 (GitHub Pages 최적화)
+// 전역 바인딩
 // ==========================================
 window.switchCalendarTab = switchCalendarTab;
 window.runLibrarySearchFilter = runLibrarySearchFilter;
@@ -69,7 +65,6 @@ export function showToast(msg) {
     setTimeout(() => { t.className = "fixed bottom-32 right-5 z-[130] transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-none"; }, 2500);
 }
 
-// [핵심 오류 수정] 빈 데이터 배열 자동 할당기
 function getWorkoutData() {
     let data = state.workouts[state.selectedDateStr];
     if (!data) {
@@ -80,23 +75,54 @@ function getWorkoutData() {
     return data;
 }
 
+// ==========================================
+// 설정 연동 (간격 포함)
+// ==========================================
 export function saveSystemSettings() {
     if(!state.userInfo) state.userInfo = {};
-    state.userInfo.defaultRestTime = parseInt(document.getElementById('setting-default-rest').value) || 90;
-    state.userInfo.defaultAlarmSound = document.getElementById('setting-default-sound').value || '1';
+    
+    // 설정 탭과 알람 탭 양쪽에서 값을 읽어와 병합 보정
+    const setRest = document.getElementById('setting-default-rest');
+    const setSound = document.getElementById('setting-default-sound');
+    const setInt = document.getElementById('setting-default-interval');
+    const alarmInt = document.getElementById('alarm-interval-select');
+
+    if (setRest) state.userInfo.defaultRestTime = parseInt(setRest.value) || 90;
+    if (setSound) state.userInfo.defaultAlarmSound = setSound.value || '1';
+    
+    // 만약 현재 보이는 탭이 알람 탭이라면 알람 탭의 select 값을 우선 적용
+    if (document.getElementById('pane-tab-alarm') && !document.getElementById('pane-tab-alarm').classList.contains('hidden')) {
+        state.userInfo.alarmInterval = parseInt(alarmInt.value) || 1000;
+    } else {
+        if (setInt) state.userInfo.alarmInterval = parseInt(setInt.value) || 1000;
+    }
+    
     triggerSave();
-    showToast("기본 설정이 적용되었습니다.");
+    loadSystemSettings(); // 양쪽 UI 동기화
+    showToast("시스템 설정이 적용되었습니다.");
 }
 
 function loadSystemSettings() {
     const dRest = state.userInfo?.defaultRestTime || 90;
     const dSound = state.userInfo?.defaultAlarmSound || '1';
+    const dInt = state.userInfo?.alarmInterval || 1000;
+    
     const restEl = document.getElementById('setting-default-rest');
     const soundEl = document.getElementById('setting-default-sound');
+    const intEl = document.getElementById('setting-default-interval');
+    const alarmIntEl = document.getElementById('alarm-interval-select');
+    const alarmSoundEl = document.getElementById('alarm-sound-select');
+
     if(restEl) restEl.value = dRest;
     if(soundEl) soundEl.value = dSound;
+    if(intEl) intEl.value = dInt;
+    if(alarmIntEl) alarmIntEl.value = dInt;
+    if(alarmSoundEl) alarmSoundEl.value = dSound;
 }
 
+// ==========================================
+// 웹 오디오 API 기반 알람 합성기
+// ==========================================
 function playAudioTone(type) {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -158,14 +184,17 @@ function triggerAlarmRing(soundType) {
 
     playAudioTone(soundType);
     if(alarmAudioInterval) clearInterval(alarmAudioInterval);
-    let repeatDelay = (soundType === '4' || soundType === '5') ? 1000 : 1800;
-    alarmAudioInterval = setInterval(() => { playAudioTone(soundType); }, repeatDelay);
+    
+    // 유저가 설정한 간격 값 호출 (기본 1.0초)
+    let userInterval = state.userInfo?.alarmInterval || 1000;
+    
+    alarmAudioInterval = setInterval(() => { playAudioTone(soundType); }, userInterval);
 }
 
 export function stopRestTimer() {
     if (restTimerInterval) clearInterval(restTimerInterval);
     if (alarmAudioInterval) clearInterval(alarmAudioInterval);
-    document.getElementById('timer-floating-bar').className = "fixed bottom-0 left-0 w-full z-[120] transform translate-y-full opacity-0 transition-all duration-500 pointer-events-none";
+    document.getElementById('timer-floating-bar').className = "fixed bottom-0 left-0 w-full z-[70] transform translate-y-full opacity-0 transition-all duration-500 pointer-events-none";
 }
 
 export function extendRestTimer(secondsToAdd) {
@@ -191,7 +220,7 @@ function startTimerLogic(seconds, soundType) {
     document.getElementById('timer-controls-default').classList.remove('hidden');
     document.getElementById('timer-controls-extend').classList.add('hidden');
     
-    bar.className = "fixed bottom-0 left-0 w-full z-[120] transform translate-y-0 opacity-100 transition-all duration-500 pointer-events-auto";
+    bar.className = "fixed bottom-0 left-0 w-full z-[70] transform translate-y-0 opacity-100 transition-all duration-500 pointer-events-auto shadow-[0_-10px_40px_rgba(245,158,11,0.2)]";
     
     const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     display.textContent = formatTime(currentTimerSeconds);
@@ -209,8 +238,16 @@ function startTimerLogic(seconds, soundType) {
 export function startGlobalAlarm() {
     const sec = parseInt(document.getElementById('manual-timer-sec').value) || 60;
     const soundType = document.getElementById('alarm-sound-select').value || '1';
+    const interval = parseInt(document.getElementById('alarm-interval-select').value) || 1000;
+    
+    // 시작과 동시에 설정 업데이트 강제 동기화
+    if(!state.userInfo) state.userInfo = {};
+    state.userInfo.defaultAlarmSound = soundType;
+    state.userInfo.alarmInterval = interval;
+    triggerSave();
+    loadSystemSettings();
+
     startTimerLogic(sec, soundType);
-    showToast("글로벌 타이머 가동 시작.");
 }
 
 export function switchCalendarTab(tabId) {
@@ -252,9 +289,11 @@ function updateHomeDashboardWidgets() {
         btn.onclick = () => {
             const currentData = getWorkoutData();
             if (!currentData.exercises.some(e => e.name === name)) {
+                let fPart = '기타', fType = '위젯';
+                Object.entries(WORKOUT_DB).forEach(([p, types]) => Object.entries(types).forEach(([t, nList]) => { if(nList.includes(name)) { fPart = p; fType = t; } }));
                 const dRest = state.userInfo?.defaultRestTime || 90;
                 const dSound = state.userInfo?.defaultAlarmSound || '1';
-                currentData.exercises.push({ part: '기타', type: '위젯', name: name, restTime: dRest, alarmSound: dSound, sets: [] });
+                currentData.exercises.push({ part: fPart, type: fType, name: name, restTime: dRest, alarmSound: dSound, sets: [] });
                 triggerSave(); showToast(`${name} 기록지에 연동 완료.`);
             } else { showToast("이미 등록된 종목입니다."); }
         };
@@ -468,7 +507,6 @@ document.getElementById('btn-undo').onclick = () => {
     }
 };
 
-// 7. 사전(라이브러리) 모달 (독립 팝업 구동)
 function getHangulChosung(str) {
     const cho = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
     let result = "";
@@ -516,7 +554,7 @@ export function runLibrarySearchFilter() {
                 const card = document.createElement('div');
                 card.className = "p-3 sm:p-4 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center";
                 card.innerHTML = `<div class="truncate mr-2"><span class="text-[10px] font-bold text-slate-500">${part}</span><h4 class="text-sm font-black text-slate-200 truncate">${name}</h4></div>
-                                  <button onclick="window.injectLibraryToToday('${part}', '${type}', '${name}')" class="px-3 py-2 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold rounded-lg transition-colors shrink-0">추가</button>`;
+                                  <button onclick="window.injectLibraryToToday('${part}', '${type}', '${name}')" class="px-3 py-2 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold rounded-lg transition-colors shrink-0">기록 추가</button>`;
                 grid.appendChild(card);
             });
         });
@@ -528,10 +566,9 @@ export function injectLibraryToToday(part, type, name) {
         const dRest = state.userInfo?.defaultRestTime || 90; const dSound = state.userInfo?.defaultAlarmSound || '1';
         data.exercises.push({ part: part, type: type, name: name, restTime: dRest, alarmSound: dSound, sets: [] });
         triggerSave(); renderWorkoutList(); showToast(`[${name}] 종목이 기록지에 즉시 연동되었습니다.`);
-    } else { showToast("이미 기록된 종목입니다."); }
+    } else { showToast("이미 추가된 종목입니다."); }
 }
 
-// 8. 루틴 관리
 export function openTemplateManager() { document.getElementById('template-modal').classList.remove('hidden'); document.getElementById('template-modal').classList.add('flex'); renderTemplateList(); }
 export function closeTemplateManager() { document.getElementById('template-modal').classList.add('hidden'); document.getElementById('template-modal').classList.remove('flex'); }
 function renderTemplateList() {
@@ -580,7 +617,6 @@ export function applyDirectPresetRoutine(namesArray) {
     triggerSave(); switchCalendarTab('tab-record'); showToast("프리셋 마운트 완료.");
 }
 
-// 9. 고도화된 통계 분석 (최고 1RM 추적 및 변화 추이 차트 결합)
 function renderWorkoutAnalysisCharts() {
     const cvsBalance = document.getElementById('chart-workout-analysis');
     const cvsVolume = document.getElementById('chart-volume-trend');
@@ -641,7 +677,6 @@ function renderWorkoutAnalysisCharts() {
     }, 50);
 }
 
-// 10. 기타 툴 및 API 바인딩
 export function runPlateCalculate() {
     const totalWeight = parseFloat(document.getElementById('plate-calc-target').value) || 0;
     const resultBox = document.getElementById('plate-calc-result');
@@ -697,7 +732,6 @@ export function saveQuickInputFABModal() {
     triggerSave(); closeQuickInputFABModal(); if(document.getElementById('pane-tab-record').classList.contains('block')) renderWorkoutList(); showToast("신속 등록 완료.");
 }
 
-// 11. 부팅 및 동기화
 function initMetricsChangeEvents() {
     const updateMetricsData = () => {
         const dStr = state.selectedDateStr; if (!dStr) return;
