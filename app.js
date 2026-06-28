@@ -1,236 +1,210 @@
 import { state, applyCustomSuppsToDB } from './store.js';
-import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON } from './services.js';
+import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON, loginWithGoogleBackend, registerWithEmailBackend, loginWithEmailBackend, logoutUserBackend } from './services.js';
 
 export function showToast(msg) { 
     const t = document.getElementById('toast'); document.getElementById('toast-text').innerText = msg; 
-    t.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 pointer-events-auto shadow-2xl"; 
-    setTimeout(() => { t.className = "fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-none"; }, 2500); 
+    t.className = "fixed bottom-5 right-5 z-[150] transform translate-y-0 opacity-100 transition-all duration-300 pointer-events-auto shadow-2xl"; 
+    setTimeout(() => { t.className = "fixed bottom-5 right-5 z-[150] transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-none"; }, 2500); 
 }
 
+// ==========================================
+// 🛡️ 영구 저장소 권한 및 정식 인증 UI 제어
+// ==========================================
+async function requestPersistentStorage() {
+    if (navigator.storage && navigator.storage.persist) {
+        try { const isPersisted = await navigator.storage.persisted(); if (!isPersisted) await navigator.storage.persist(); } 
+        catch(e) { console.warn("영구 저장소 차단:", e); }
+    }
+}
+
+function updateAccountStatusUI() {
+    const badge = document.getElementById('account-status-badge');
+    const btnGoogle = document.getElementById('btn-google-auth'); const btnEmail = document.getElementById('btn-email-auth'); const btnLogout = document.getElementById('btn-logout-auth');
+    if(!badge) return;
+    if(state.userInfo && state.userInfo.isPermanent) {
+        badge.className = "px-3 py-1 text-[11px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full";
+        badge.innerText = `🔐 영구 보존 세션 (${state.userInfo.email})`;
+        btnGoogle.classList.add('hidden'); btnEmail.classList.add('hidden'); btnLogout.classList.remove('hidden');
+    } else {
+        badge.className = "px-3 py-1 text-[11px] font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-full";
+        badge.innerText = "⚠️ 임시 세션 (데이터 유실 위험)";
+        btnGoogle.classList.remove('hidden'); btnEmail.classList.remove('hidden'); btnLogout.classList.add('hidden');
+    }
+}
+
+window.triggerGoogleLogin = async () => {
+    try {
+        const res = await loginWithGoogleBackend();
+        if(res.mode === "linked") showToast("익명 데이터가 성공적으로 구글 계정으로 이관되었습니다.");
+        else showToast("구글 계정 동기화 완료.");
+        updateAccountStatusUI(); finishInit();
+    } catch(err) { showToast("구글 로그인 취소."); }
+};
+window.openEmailAuthModal = () => { document.getElementById('auth-email-input').value = ''; document.getElementById('auth-password-input').value = ''; document.getElementById('email-auth-modal').classList.remove('hidden'); document.getElementById('email-auth-modal').classList.add('flex'); };
+window.closeEmailAuthModal = () => { document.getElementById('email-auth-modal').classList.add('hidden'); document.getElementById('email-auth-modal').classList.remove('flex'); };
+window.submitEmailRegister = async () => {
+    const e = document.getElementById('auth-email-input').value.trim(); const p = document.getElementById('auth-password-input').value.trim();
+    if(!e || p.length < 6) { showToast("이메일과 6자리 패스워드가 필요합니다."); return; }
+    try { await registerWithEmailBackend(e, p); showToast("정식 계정 연동 및 이관 완료."); window.closeEmailAuthModal(); updateAccountStatusUI(); finishInit(); } catch(err) { showToast("가입 실패. 규격을 확인하세요."); }
+};
+window.submitEmailLogin = async () => {
+    const e = document.getElementById('auth-email-input').value.trim(); const p = document.getElementById('auth-password-input').value.trim();
+    if(!e || !p) { showToast("정보를 입력하세요."); return; }
+    try { await loginWithEmailBackend(e, p); showToast("로그인 성공. 데이터 갱신 중."); window.closeEmailAuthModal(); updateAccountStatusUI(); finishInit(); } catch(err) { showToast("로그인 실패."); }
+};
+window.triggerLogout = async () => { if(confirm("로컬 캐시가 정리됩니다. 로그아웃 할까요?")) { await logoutUserBackend(); } };
+
+// ==========================================
+// 기존 식단 플래너 앱 로직
+// ==========================================
 export function finishInit() { 
     document.getElementById('prof-weight-display').innerText = state.userInfo.weight + 'kg'; 
     document.getElementById('prof-bf-display').innerText = state.userInfo.targetBF + '%';
     document.getElementById('prof-height-display').innerText = state.userInfo.height + 'cm';
     if(state.userInfo.targetDate) { document.getElementById('badge-target-date').innerText = `Target Date: ${state.userInfo.targetDate.substring(5).replace('-','.')}`; }
-    applyCustomSuppsToDB(); initCalcDropdowns();
-    if(state.phases.length > 0) loadPhase(state.phases[0].id); 
+    applyCustomSuppsToDB(); initCalcDropdowns(); renderPhaseNav();
+    if(state.phases.length > 0) loadPhase(state.currentPhaseId || state.phases[0].id); 
     runSmartCalc('carb'); runSmartCalc('pro'); runSmartCalc('fat');
 }
 
-export function renderPhaseTabs() {
-    const container = document.getElementById('phase-tabs-container'); container.innerHTML = '';
+function renderPhaseNav() {
+    const c = document.getElementById('phase-nav-container'); c.innerHTML = '';
     state.phases.forEach(p => {
-        const isActive = (p.id === state.currentPhaseId);
-        const btnClass = isActive ? "px-5 py-3 rounded-lg text-base font-bold phase-btn-active shrink-0 transition-colors" : "px-5 py-3 rounded-lg text-base font-bold text-slate-400 hover:bg-slate-800 shrink-0 transition-colors";
-        container.innerHTML += `<button onclick="window.loadPhase('${p.id}')" class="${btnClass}">${p.title}</button>`;
+        const b = document.createElement('button'); b.innerText = p.title; b.className = `nav-button px-5 py-3 text-sm font-bold text-slate-400 bg-[#090D16] border border-slate-800 rounded-full whitespace-nowrap transition-colors flex-shrink-0 min-w-max ${p.id === state.currentPhaseId ? 'active' : 'hover:bg-slate-800/40'}`;
+        b.onclick = () => loadPhase(p.id); c.appendChild(b);
     });
+    const addB = document.createElement('button'); addB.innerText = '+ 페이즈 추가'; addB.className = "px-5 py-3 text-sm font-bold text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-full whitespace-nowrap transition-colors hover:bg-amber-500/20 flex-shrink-0 min-w-max";
+    addB.onclick = () => { const id = 'p_'+Date.now(); state.phases.push({id: id, title: '새 페이즈', desc: '', meals: []}); state.currentPhaseId = id; triggerSave(); renderPhaseNav(); loadPhase(id); }; c.appendChild(addB);
 }
 
-// [개선 완료] 입력값 증감 버튼 처리 로직 (터치 시 10g 씩 조정)
-export function adjAmt(mIdx, iIdx, delta) {
-    const cp = state.phases.find(p => p.id === state.currentPhaseId);
-    let current = parseFloat(cp.meals[mIdx].items[iIdx].amount) || 0;
-    let next = current + delta; if(next < 0) next = 0;
-    cp.meals[mIdx].items[iIdx].amount = next;
-    triggerSave(); calculateMacros(); loadPhase(state.currentPhaseId);
+function loadPhase(phaseId) {
+    state.currentPhaseId = phaseId; renderPhaseNav();
+    const phase = state.phases.find(p => p.id === phaseId); if(!phase) return;
+    document.getElementById('summary-phase-title').innerText = `${phase.title} 분석`;
+    renderMeals();
 }
 
-export function loadPhase(phaseId) { 
-    if(!state.phases.find(p => p.id === phaseId) && state.phases.length > 0) phaseId = state.phases[0].id;
-    state.currentPhaseId = phaseId; renderPhaseTabs();
-    const cp = state.phases.find(p => p.id === phaseId); if(!cp) return;
-    document.getElementById('phase-description').innerText = cp.desc;
-    const container = document.getElementById('timeline-container'); container.innerHTML = '';
-    
-    cp.meals.forEach((meal, mIdx) => {
-        let itemsHtml = ''; if(!meal.items) meal.items = [];
-        meal.items.forEach((item, iIdx) => {
-            let opts = `<optgroup label="탄수화물">` + state.foodCategories['탄수화물'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
-            opts += `<optgroup label="단백질">` + state.foodCategories['단백질'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
-            opts += `<optgroup label="지방">` + state.foodCategories['지방'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
-            opts += `<optgroup label="야채">` + state.foodCategories['야채'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
-            opts += `<optgroup label="보충제">` + state.foodCategories['보충제'].map(o => `<option value="${o}" ${o===item.name?'selected':''}>${o}</option>`).join('') + `</optgroup>`;
-            
-            // [개선 완료] 숫자가 가려지지 않는 커스텀 +,- 컨트롤러 버튼 UI 도입
-            itemsHtml += `
-            <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-slate-800 mb-2 gap-2">
-                <select onchange="window.updateItemName(${mIdx}, ${iIdx}, event.target.value)" class="bg-slate-800 text-slate-200 text-sm px-2 py-2 rounded-lg outline-none flex-1 min-w-[90px] max-w-[140px]">${opts}</select>
-                <div class="flex items-center gap-1.5 sm:gap-2">
-                    <div class="flex items-center bg-slate-950 border border-slate-700 rounded-lg p-0.5 shadow-inner">
-                        <button onclick="window.adjAmt(${mIdx}, ${iIdx}, -10)" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors text-lg font-bold select-none">−</button>
-                        <input type="number" oninput="window.updateItemAmount(${mIdx}, ${iIdx}, event.target.value)" class="w-10 sm:w-14 bg-transparent text-white text-center text-base font-bold outline-none" value="${item.amount || 0}">
-                        <button onclick="window.adjAmt(${mIdx}, ${iIdx}, 10)" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors text-lg font-bold select-none">＋</button>
-                    </div>
-                    <span class="text-sm text-slate-400 font-bold w-2 text-center">g</span>
-                    <button onclick="window.deleteItem(${mIdx}, ${iIdx})" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg ml-0.5 transition-colors text-base font-black">✕</button>
-                </div>
-            </div>`;
-        });
+function renderMeals() {
+    const phase = state.phases.find(p => p.id === state.currentPhaseId); const c = document.getElementById('meal-cards-container'); c.innerHTML = '';
+    if(!phase) return;
+    let phaseC = 0, phaseP = 0, phaseF = 0, phaseKcal = 0;
+    phase.meals.forEach((meal, mealIdx) => {
+        let mC = 0, mP = 0, mF = 0, mKcal = 0;
+        let itemsHtml = '';
+        if(!meal.isWorkout) {
+            meal.items.forEach((item, itemIdx) => {
+                const ratio = state.foodDB[item.name]; if(!ratio) return;
+                const iC = item.amount * ratio.c; const iP = item.amount * ratio.p; const iF = item.amount * ratio.f; const iKcal = item.amount * ratio.k;
+                mC += iC; mP += iP; mF += iF; mKcal += iKcal;
+                itemsHtml += `<div class="flex items-center justify-between text-xs py-1"><div class="flex items-center gap-2"><span class="text-slate-400 font-bold w-4 text-center cursor-pointer hover:text-rose-400" onclick="window.removeFoodItem(${mealIdx}, ${itemIdx})">✕</span><span class="font-bold text-slate-200">${item.name}</span></div><div class="flex items-center gap-1.5"><button onclick="window.adjFoodAmount(${mealIdx}, ${itemIdx}, -10)" class="w-5 h-5 bg-slate-800 rounded text-slate-400 font-black hover:bg-slate-700">-</button><span class="w-10 text-right font-black text-amber-400">${item.amount}g</span><button onclick="window.adjFoodAmount(${mealIdx}, ${itemIdx}, 10)" class="w-5 h-5 bg-slate-800 rounded text-slate-400 font-black hover:bg-slate-700">+</button></div></div>`;
+            });
+        }
+        phaseC += mC; phaseP += mP; phaseF += mF; phaseKcal += mKcal;
+        
+        let cColor = meal.color || 'slate'; const colorMap = { 'amber':'border-amber-500/50 bg-amber-500/5 text-amber-400', 'emerald':'border-emerald-500/50 bg-emerald-500/5 text-emerald-400', 'sky':'border-sky-500/50 bg-sky-500/5 text-sky-400', 'rose':'border-rose-500/50 bg-rose-500/5 text-rose-400', 'violet':'border-violet-500/50 bg-violet-500/5 text-violet-400', 'slate':'border-slate-500/50 bg-slate-500/5 text-slate-400' };
+        let tagClass = colorMap[cColor] || colorMap['slate'];
 
-        // [개선 완료] Flexbox 독립 타임라인 구축: 스마트폰에서 라벨(Label)이 시간 위로 위치하게 하는 반응형(order) 레이아웃 적용 및 드래그 핸들 크기 대폭 확장
-        container.innerHTML += `
-        <div class="flex items-stretch mb-6">
-            <div class="relative flex flex-col items-center mr-4 sm:mr-6 w-10 shrink-0">
-                <div class="absolute top-10 bottom-[-32px] w-0.5 bg-slate-800/80 z-0"></div>
-                <div onclick="event.stopPropagation(); window.cycleColor(${mIdx})" class="drag-handle relative z-10 w-10 h-10 bg-${meal.color}-500 rounded-full border-4 border-[#090D16] flex items-center justify-center cursor-move shadow-[0_0_15px_rgba(14,165,233,0.4)] active:scale-110 transition-transform" title="여기를 눌러 드래그">
-                    <span class="text-white text-base font-black select-none pointer-events-none">↕</span>
-                </div>
+        const card = document.createElement('div');
+        card.className = "meal-card-handle glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-xl space-y-4 cursor-default";
+        card.innerHTML = `
+            <div class="flex justify-between items-start border-b border-slate-800/80 pb-3">
+                <div class="flex items-center gap-3"><span class="text-slate-500 hover:text-white cursor-move text-lg font-bold px-1 select-none">☰</span><div><div class="flex items-center gap-2 mb-1"><span class="px-2 py-0.5 text-[10px] font-black uppercase rounded border ${tagClass}">${meal.time}</span></div><h3 class="text-base font-black text-white">${meal.label}</h3></div></div>
+                <div class="flex gap-1.5"><button onclick="window.openEditMealModal(${mealIdx})" class="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs font-bold border border-slate-700 hover:bg-slate-700">편집</button><button onclick="window.deleteMeal(${mealIdx})" class="px-2 py-1 bg-rose-950/30 text-rose-400 rounded text-xs font-bold border border-rose-900/30 hover:bg-rose-900/50">삭제</button></div>
             </div>
-            <div class="glass-panel flex-1 p-4 sm:p-5 rounded-2xl border border-slate-800 w-full overflow-hidden">
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center cursor-pointer gap-4 sm:gap-0" onclick="window.toggleCollapse(${mIdx})">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full sm:w-auto" onclick="event.stopPropagation()">
-                        <input type="text" onchange="window.updateMealField(${mIdx}, 'label', event.target.value)" value="${meal.label}" class="order-1 sm:order-2 px-2 py-0.5 text-sm font-black uppercase bg-${meal.color}-500/10 text-${meal.color}-400 border border-${meal.color}-500/20 rounded-md outline-none w-full sm:w-[160px]">
-                        <input type="time" onchange="window.updateMealField(${mIdx}, 'time', event.target.value)" value="${meal.time}" class="order-2 sm:order-1 bg-transparent text-white font-black text-3xl sm:text-2xl tracking-tighter cursor-pointer p-0 -ml-1 sm:ml-0">
-                    </div>
-                    <div class="flex gap-2 items-center self-end sm:self-auto shrink-0 mt-2 sm:mt-0" onclick="event.stopPropagation()">
-                        <button onclick="window.openEditMealModal(${mIdx}, true)" class="text-xs sm:text-sm px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-300 rounded border border-slate-700 transition-colors">📋 복제</button>
-                        <button onclick="window.openEditMealModal(${mIdx}, false)" class="text-xs sm:text-sm px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors">⚙️ 수정</button>
-                        <button onclick="window.deleteMeal(${mIdx})" class="text-xs sm:text-sm px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-400 rounded border border-slate-700 transition-colors">🗑️ 삭제</button>
-                        <button onclick="window.toggleCollapse(${mIdx})" class="text-lg px-2 py-1 ml-1 text-slate-400 hover:text-white transition-colors">${meal.isCollapsed ? '🔽' : '🔼'}</button>
-                    </div>
+            ${meal.explain ? `<p class="text-xs text-slate-400 font-bold whitespace-pre-line">${meal.explain}</p>` : ''}
+            ${meal.supps ? `<div class="bg-slate-900/60 border border-slate-800 rounded-lg p-3"><p class="text-[10px] font-black text-sky-500 mb-1">💊 Supplement Stack</p><p class="text-xs text-slate-300 font-bold whitespace-pre-line">${meal.supps}</p></div>` : ''}
+            ${meal.isWorkout ? `<div class="bg-rose-950/20 border border-rose-900/30 rounded-lg p-4 text-center"><p class="text-sm font-black text-rose-400">🔥 훈련 스케줄 (식품 미할당)</p></div>` : `
+                <div class="bg-slate-950/50 border border-slate-800/80 rounded-xl p-4">
+                    <div class="flex justify-between items-center mb-3"><p class="text-[10px] font-black text-amber-500 uppercase tracking-wider">Foods</p><span class="text-xs font-black text-white">${mKcal.toFixed(0)} kcal</span></div>
+                    <div class="space-y-1">${itemsHtml}</div>
                 </div>
-                <div class="transition-all duration-300 overflow-hidden ${meal.isCollapsed ? 'max-h-0 opacity-0 m-0' : 'max-h-[3000px] opacity-100 mt-5'}">
-                    <input type="text" onchange="window.updateMealField(${mIdx}, 'explain', event.target.value)" value="${meal.explain || ''}" placeholder="스케줄 메모 (예: 오후 메인 본 운동 세션)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-sm sm:text-base text-white font-bold outline-none focus:border-sky-500 mb-3">
-                    <textarea onchange="window.updateMealField(${mIdx}, 'supps', event.target.value)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-sm sm:text-base text-slate-200 outline-none focus:border-sky-500 mb-3 min-h-[100px] custom-scrollbar" placeholder="보충제 섭취 프로토콜 및 상세 코칭 메모">${meal.supps || ''}</textarea>
-                    ${itemsHtml}
-                    <button onclick="window.addItem(${mIdx})" class="w-full py-3 border border-dashed border-slate-700 text-sm sm:text-base text-slate-400 hover:text-sky-400 font-bold mt-2 rounded-xl transition-colors">+ 식품 및 보충제 추가</button>
-                </div>
-            </div>
-        </div>`;
+            `}
+        `;
+        c.appendChild(card);
     });
-    calculateMacros();
 
-    // [개선 완료] 이미지 보존 추적 모드(forceFallback) 활성화: 터치 딜레이를 부여하여 모바일 스크롤 동작과 혼동되지 않도록 보호
-    if (typeof Sortable !== 'undefined') {
-        if (window.timelineSortable) { window.timelineSortable.destroy(); }
-        window.timelineSortable = new Sortable(document.getElementById('timeline-container'), {
-            handle: '.drag-handle', animation: 250, ghostClass: 'opacity-10', 
-            delay: 150, delayOnTouchOnly: true, 
-            forceFallback: false, // Flex 레이아웃으로 변경되었으므로 브라우저 네이티브 드래그 이미지가 완벽하게 잡히게 됩니다.
-            onEnd: function (evt) {
-                const oldIdx = evt.oldIndex; const newIdx = evt.newIndex; if (oldIdx === newIdx) return;
-                const phase = state.phases.find(p => p.id === state.currentPhaseId);
-                const movedItem = phase.meals.splice(oldIdx, 1)[0]; phase.meals.splice(newIdx, 0, movedItem);
-                triggerSave(showToast); setTimeout(() => loadPhase(state.currentPhaseId), 10);
-            }
-        });
+    const addCard = document.createElement('div'); addCard.className = "glass-panel p-4 rounded-2xl border border-dashed border-slate-700 flex justify-center items-center hover:bg-slate-800/40 transition-colors cursor-pointer";
+    addCard.innerHTML = `<span class="text-sm font-bold text-amber-500">+ 새로운 식사/일정 추가</span>`; addCard.onclick = () => window.openEditMealModal(-1); c.appendChild(addCard);
+
+    if(typeof Sortable !== 'undefined') {
+        if(window.mealSortable) window.mealSortable.destroy();
+        window.mealSortable = new Sortable(c, { handle: '.cursor-move', animation: 150, onEnd: function (evt) { const oldI = evt.oldIndex; const newI = evt.newIndex; if(oldI === newI || newI >= phase.meals.length) return; const moved = phase.meals.splice(oldI, 1)[0]; phase.meals.splice(newI, 0, moved); triggerSave(); renderMeals(); } });
     }
+    updateSummary(phaseC, phaseP, phaseF, phaseKcal);
 }
 
-export function openPhaseModal(isNew = false) { state.editingPhaseIsNew = isNew; if (isNew) { document.getElementById('phase-title').value = ''; document.getElementById('phase-desc').value = ''; } else { const cp = state.phases.find(p => p.id === state.currentPhaseId); document.getElementById('phase-title').value = cp.title; document.getElementById('phase-desc').value = cp.desc; } document.getElementById('phase-modal').classList.remove('hidden'); document.getElementById('phase-modal').classList.add('flex'); }
-export function closePhaseModal() { document.getElementById('phase-modal').classList.add('hidden'); document.getElementById('phase-modal').classList.remove('flex'); }
-export function savePhaseModal() { const title = document.getElementById('phase-title').value || '새 탭'; const desc = document.getElementById('phase-desc').value || ''; if (state.editingPhaseIsNew) { const newId = 'p_' + Date.now(); state.phases.push({ id: newId, title: title, desc: desc, meals: [] }); state.currentPhaseId = newId; } else { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.title = title; cp.desc = desc; } closePhaseModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("탭 저장 완료."); }
-export function deletePhase() { if(state.phases.length <= 1) { showToast("최소 1개의 탭은 유지해야 합니다."); return; } if(confirm("탭 전체를 삭제하시겠습니까? 데이터가 파괴됩니다.")) { state.phases = state.phases.filter(p => p.id !== state.currentPhaseId); triggerSave(showToast); loadPhase(state.phases[0].id); showToast("탭 삭제됨."); } }
-export function copyPhase() { const cp = state.phases.find(p => p.id === state.currentPhaseId); state.clipboardMeals = JSON.parse(JSON.stringify(cp.meals)); showToast("식단 세트 복사 완료."); }
-export function pastePhase() { if (!state.clipboardMeals || state.clipboardMeals.length === 0) { showToast("복사된 세트가 없습니다."); return; } if(confirm("⚠️ 현재 탭의 내용이 덮어쓰기 됩니다. 진행할까요?")) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals = state.clipboardMeals.map(m => { let cloned = JSON.parse(JSON.stringify(m)); cloned.id = 'm' + Date.now() + Math.floor(Math.random() * 1000); return cloned; }); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("덮어쓰기 완료."); } }
-
-export function openEditMealModal(mIdx, isDuplicate) { let meal; if (mIdx !== null) meal = state.phases.find(p => p.id === state.currentPhaseId).meals[mIdx]; else meal = { time: '12:00', label: '새 일정', color: 'sky', explain: '', supps: '', items: [] }; state.editingMealState = { mIdx: mIdx, isDuplicate: isDuplicate, originalItems: meal.items || [] }; document.getElementById('edit-meal-title').innerText = (isDuplicate) ? "📋 일정 복제" : (mIdx === null ? "➕ 새 일정 추가" : "⚙️ 일정 수정"); document.getElementById('edit-meal-time').value = meal.time; document.getElementById('edit-meal-label').value = meal.label; document.getElementById('edit-meal-color').value = meal.color; document.getElementById('edit-meal-explain').value = meal.explain || ''; document.getElementById('edit-meal-supps').value = meal.supps || ''; document.getElementById('edit-meal-modal').classList.remove('hidden'); document.getElementById('edit-meal-modal').classList.add('flex'); }
-export function closeEditMealModal() { document.getElementById('edit-meal-modal').classList.add('hidden'); document.getElementById('edit-meal-modal').classList.remove('flex'); }
-export function saveEditMealModal() { const time = document.getElementById('edit-meal-time').value; const label = document.getElementById('edit-meal-label').value || '일정'; const color = document.getElementById('edit-meal-color').value; const explain = document.getElementById('edit-meal-explain').value; const supps = document.getElementById('edit-meal-supps').value; const cp = state.phases.find(p => p.id === state.currentPhaseId); if (state.editingMealState.mIdx === null || state.editingMealState.isDuplicate) { const newObj = { id: 'm'+Date.now(), time: time, label: label, color: color, explain: explain, supps: supps, items: JSON.parse(JSON.stringify(state.editingMealState.originalItems)), isCollapsed: false }; if(state.editingMealState.isDuplicate) { cp.meals.splice(state.editingMealState.mIdx + 1, 0, newObj); showToast("복제되었습니다."); } else { cp.meals.push(newObj); showToast("추가되었습니다."); } } else { const meal = cp.meals[state.editingMealState.mIdx]; meal.time = time; meal.label = label; meal.color = color; meal.explain = explain; meal.supps = supps; showToast("수정 완료."); } triggerSave(showToast); closeEditMealModal(); loadPhase(state.currentPhaseId); }
-
-export function cycleColor(mIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); const colors = ['sky', 'emerald', 'amber', 'rose', 'violet', 'slate']; const current = cp.meals[mIdx].color || 'sky'; cp.meals[mIdx].color = colors[(colors.indexOf(current) + 1) % colors.length]; triggerSave(showToast); loadPhase(state.currentPhaseId); }
-export function toggleCollapse(mIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].isCollapsed = !cp.meals[mIdx].isCollapsed; loadPhase(state.currentPhaseId); }
-export function updateMealField(mIdx, field, val) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx][field] = val; triggerSave(showToast); loadPhase(state.currentPhaseId); }
-export function updateItemName(mIdx, iIdx, val) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items[iIdx].name = val; triggerSave(showToast); calculateMacros(); }
-export function updateItemAmount(mIdx, iIdx, val) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items[iIdx].amount = parseFloat(val)||0; triggerSave(showToast); calculateMacros(); }
-export function deleteItem(mIdx, iIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items.splice(iIdx, 1); triggerSave(showToast); loadPhase(state.currentPhaseId); }
-export function addItem(mIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items.push({name:'백미', amount:100}); triggerSave(showToast); loadPhase(state.currentPhaseId); }
-export function deleteMeal(mIdx) { if(confirm("이 일정을 삭제하시겠습니까?")) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals.splice(mIdx, 1); triggerSave(showToast); loadPhase(state.currentPhaseId); } }
-
-export function calculateMacros() {
-    let tC=0, tP=0, tF=0, tK=0; let cSrc={}, pSrc={}, fSrc={}; const cp = state.phases.find(p => p.id === state.currentPhaseId);
-    if(cp) { cp.meals.forEach(m => { if(m.items) { m.items.forEach(i => { const db = state.foodDB[i.name]; if(db) { let amt = i.amount || 0; let c=db.c*amt, p=db.p*amt, f=db.f*amt; tC+=c; tP+=p; tF+=f; tK+=db.k*amt; if(c>0) cSrc[i.name] = (cSrc[i.name]||0) + c; if(p>0) pSrc[i.name] = (pSrc[i.name]||0) + p; if(f>0) fSrc[i.name] = (fSrc[i.name]||0) + f; }});} }); }
-    let cKcal = tC * 4, pKcal = tP * 4, fKcal = tF * 9; let totCalc = cKcal + pKcal + fKcal;
-    let cPct = totCalc > 0 ? Math.round((cKcal / totCalc) * 100) : 0; let pPct = totCalc > 0 ? Math.round((pKcal / totCalc) * 100) : 0; let fPct = totCalc > 0 ? Math.round((fKcal / totCalc) * 100) : 0;
+function updateSummary(c, p, f, kcal) {
+    document.getElementById('total-c').innerText = c.toFixed(1) + 'g'; document.getElementById('total-p').innerText = p.toFixed(1) + 'g'; document.getElementById('total-f').innerText = f.toFixed(1) + 'g'; document.getElementById('total-kcal').innerHTML = `${kcal.toFixed(0)} <span class="text-sm">kcal</span>`;
+    let tC = parseFloat(document.getElementById('calc-c-target').value) || 300; let tP = parseFloat(document.getElementById('calc-p-target').value) || 160; let tF = parseFloat(document.getElementById('calc-f-target').value) || 50;
+    document.getElementById('bar-c').style.width = Math.min(100, (c/tC)*100) + '%'; document.getElementById('bar-p').style.width = Math.min(100, (p/tP)*100) + '%'; document.getElementById('bar-f').style.width = Math.min(100, (f/tF)*100) + '%';
     
-    document.getElementById('dash-kcal').innerText = Math.round(tK).toLocaleString(); 
-    document.getElementById('dash-carbs').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-amber-500">${tC.toFixed(1)}g</span> <span class="text-sm sm:text-base text-amber-400/80 font-bold ml-1">(${cPct}%)</span>`;
-    document.getElementById('dash-protein').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-emerald-400">${tP.toFixed(1)}g</span> <span class="text-sm sm:text-base text-emerald-400/80 font-bold ml-1">(${pPct}%)</span>`;
-    document.getElementById('dash-fat').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-sky-400">${tF.toFixed(1)}g</span> <span class="text-sm sm:text-base text-sky-400/80 font-bold ml-1">(${fPct}%)</span>`;
-    document.getElementById('sticky-kcal').innerText = Math.round(tK).toLocaleString(); document.getElementById('sticky-carbs').innerHTML = `${tC.toFixed(1)}g <span class="text-[10px] font-bold">(${cPct}%)</span>`; document.getElementById('sticky-protein').innerHTML = `${tP.toFixed(1)}g <span class="text-[10px] font-bold">(${pPct}%)</span>`; document.getElementById('sticky-fat').innerHTML = `${tF.toFixed(1)}g <span class="text-[10px] font-bold">(${fPct}%)</span>`;
-    
-    if (!state.pieChartInstance && !document.getElementById('tab-analysis').classList.contains('hidden')) { 
-        state.pieChartInstance = new Chart(document.getElementById('chart-pie-macros').getContext('2d'), { type: 'doughnut', data: { labels: ['탄수화물', '단백질', '지방'], datasets: [{ data: [tC, tP, tF], backgroundColor: ['#F59E0B', '#10B981', '#0EA5E9'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8', font: { size: 14 } } } } } }); 
-    } else if (state.pieChartInstance) { state.pieChartInstance.data.datasets[0].data = [tC, tP, tF]; state.pieChartInstance.update(); }
-    renderAnalysisDetails(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, fSrc);
+    if(state.pieChartInstance) state.pieChartInstance.destroy();
+    const ctx = document.getElementById('chart-pie-macros').getContext('2d');
+    const totalMac = (c*4)+(p*4)+(f*9); const pC = totalMac>0?((c*4)/totalMac*100).toFixed(1):0; const pP = totalMac>0?((p*4)/totalMac*100).toFixed(1):0; const pF = totalMac>0?((f*9)/totalMac*100).toFixed(1):0;
+    state.pieChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: [`탄수화물 ${pC}%`, `단백질 ${pP}%`, `지방 ${pF}%`], datasets: [{ data: [c*4, p*4, f*9], backgroundColor: ['#F59E0B', '#10B981', '#0EA5E9'], borderWidth: 0, hoverOffset: 4 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: '#F8FAFC', font: { size: 10, family: 'Pretendard' }, boxWidth: 10 } } } } });
 }
 
-export function renderAnalysisDetails(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, fSrc) {
-    document.getElementById('src-total-c').innerText = `${tC.toFixed(1)}g (${cPct}%)`; document.getElementById('src-total-p').innerText = `${tP.toFixed(1)}g (${pPct}%)`; document.getElementById('src-total-f').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
-    const renderList = (srcObj, total, elId, colorCls) => { let html = ''; let sorted = Object.entries(srcObj).sort((a,b)=>b[1]-a[1]); sorted.forEach(([name, amt]) => { let pct = total > 0 ? Math.round((amt/total)*100) : 0; html += `<div class="mb-3"><div class="flex justify-between text-xs text-slate-300 mb-1"><span>${name}</span><span>${amt.toFixed(1)}g (${pct}%)</span></div><div class="w-full bg-slate-800 rounded-full h-2"><div class="bg-${colorCls} h-2 rounded-full" style="width: ${pct}%"></div></div></div>`; }); document.getElementById(elId).innerHTML = html; };
-    renderList(cSrc, tC, 'src-list-c', 'amber-500'); renderList(pSrc, tP, 'src-list-p', 'emerald-500'); renderList(fSrc, tF, 'src-list-f', 'sky-500');
-}
+window.adjFoodAmount = (mealIdx, itemIdx, delta) => { const phase = state.phases.find(p => p.id === state.currentPhaseId); phase.meals[mealIdx].items[itemIdx].amount += delta; if(phase.meals[mealIdx].items[itemIdx].amount < 0) phase.meals[mealIdx].items[itemIdx].amount = 0; triggerSave(); renderMeals(); };
+window.removeFoodItem = (mealIdx, itemIdx) => { const phase = state.phases.find(p => p.id === state.currentPhaseId); phase.meals[mealIdx].items.splice(itemIdx, 1); triggerSave(); renderMeals(); };
+window.deleteMeal = (mealIdx) => { if(confirm("삭제하시겠습니까?")) { const phase = state.phases.find(p => p.id === state.currentPhaseId); phase.meals.splice(mealIdx, 1); triggerSave(); renderMeals(); } };
 
-export function initCalcDropdowns() {
-    const cDrop = document.getElementById('calc-carb-src'); const pDrop = document.getElementById('calc-pro-src'); const fDrop = document.getElementById('calc-fat-src');
-    cDrop.innerHTML = ''; pDrop.innerHTML = ''; fDrop.innerHTML = ''; 
-    state.foodCategories['탄수화물'].forEach(f => cDrop.innerHTML += `<option value="${f}">${f}</option>`); state.foodCategories['단백질'].forEach(f => pDrop.innerHTML += `<option value="${f}">${f}</option>`); state.foodCategories['지방'].forEach(f => { if(state.foodDB[f].f > 0.1) fDrop.innerHTML += `<option value="${f}">${f}</option>`; });
-    cDrop.value = '백미'; pDrop.value = '닭가슴살'; fDrop.value = '아몬드';
-}
+window.openEditMealModal = (mealIdx) => {
+    const phase = state.phases.find(p => p.id === state.currentPhaseId); document.getElementById('edit-meal-modal').classList.remove('hidden'); document.getElementById('edit-meal-modal').classList.add('flex');
+    if(mealIdx === -1) {
+        state.editingMealState = { label: '새 일정', time: '12:00', color: 'slate', explain: '', supps: '', isWorkout: false, items: [] }; document.getElementById('edit-meal-title').innerText = "새 식사/일정 추가";
+    } else {
+        state.editingMealState = JSON.parse(JSON.stringify(phase.meals[mealIdx])); state.editingMealState._originalIdx = mealIdx; document.getElementById('edit-meal-title').innerText = "식사 편집";
+    }
+    document.getElementById('edit-meal-label').value = state.editingMealState.label; document.getElementById('edit-meal-time').value = state.editingMealState.time; document.getElementById('edit-meal-color').value = state.editingMealState.color || 'slate'; document.getElementById('edit-meal-explain').value = state.editingMealState.explain || ''; document.getElementById('edit-meal-supps').value = state.editingMealState.supps || ''; document.getElementById('edit-meal-isworkout').checked = state.editingMealState.isWorkout || false;
+    renderEditMealItems();
+};
+window.closeEditMealModal = () => { document.getElementById('edit-meal-modal').classList.add('hidden'); document.getElementById('edit-meal-modal').classList.remove('flex'); state.editingMealState = null; };
+window.saveEditMealModal = () => {
+    state.editingMealState.label = document.getElementById('edit-meal-label').value || '이름 없음'; state.editingMealState.time = document.getElementById('edit-meal-time').value || '00:00'; state.editingMealState.color = document.getElementById('edit-meal-color').value; state.editingMealState.explain = document.getElementById('edit-meal-explain').value; state.editingMealState.supps = document.getElementById('edit-meal-supps').value; state.editingMealState.isWorkout = document.getElementById('edit-meal-isworkout').checked;
+    Array.from(document.getElementById('edit-meal-items-container').children).forEach((row, i) => { const s = row.querySelector('.food-select'); const a = row.querySelector('.food-amount'); if(s && a && state.editingMealState.items[i]) { state.editingMealState.items[i].name = s.value; state.editingMealState.items[i].amount = parseInt(a.value) || 0; } });
+    const phase = state.phases.find(p => p.id === state.currentPhaseId);
+    if(state.editingMealState._originalIdx !== undefined) phase.meals[state.editingMealState._originalIdx] = state.editingMealState; else phase.meals.push(state.editingMealState);
+    delete state.editingMealState._originalIdx; triggerSave(); window.closeEditMealModal(); renderMeals();
+};
 
-export function runSmartCalc(type) {
-    let src = document.getElementById(`calc-${type}-src`).value; let amt = parseFloat(document.getElementById(`calc-${type}-amt`).value) || 0; let targetMacro = 0; let resHtml = '';
-    if(type === 'carb') { targetMacro = amt * state.foodDB[src].c; state.foodCategories['탄수화물'].forEach(f => { if(f !== src && state.foodDB[f].c > 0) { resHtml += `<div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0 text-base"><span class="text-slate-400">${f}</span><span class="text-white font-bold">${Math.round(targetMacro/state.foodDB[f].c)}g</span></div>`; } }); } 
-    else if(type === 'pro') { targetMacro = amt * state.foodDB[src].p; state.foodCategories['단백질'].forEach(f => { if(f !== src && state.foodDB[f].p > 0) { resHtml += `<div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0 text-base"><span class="text-slate-400">${f}</span><span class="text-white font-bold">${Math.round(targetMacro/state.foodDB[f].p)}g</span></div>`; } }); } 
-    else if(type === 'fat') { targetMacro = amt * state.foodDB[src].f; state.foodCategories['지방'].forEach(f => { if(f !== src && state.foodDB[f].f > 0.1) { resHtml += `<div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0 text-base"><span class="text-slate-400">${f}</span><span class="text-white font-bold">${Math.round(targetMacro/state.foodDB[f].f)}g</span></div>`; } }); }
-    document.getElementById(`calc-${type}-res`).innerHTML = resHtml;
-}
-
-export function switchMainTab(tabId) { 
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); document.getElementById(tabId).classList.remove('hidden'); 
-    const tabs = ['tab-timeline', 'tab-calculator', 'tab-analysis'];
-    tabs.forEach(t => { document.getElementById('btn-' + t).className = (t === tabId) ? "px-5 py-3 rounded-xl text-base font-bold active-tab shrink-0" : "px-5 py-3 rounded-xl text-base font-bold border border-slate-800 text-slate-400 hover:text-white shrink-0"; });
-    if(tabId === 'tab-analysis') calculateMacros();
-}
-
-export function openProfileModal() { document.getElementById('mod-weight-user').value=state.userInfo.weight; document.getElementById('mod-height').value=state.userInfo.height; document.getElementById('mod-bf').value=state.userInfo.targetBF; document.getElementById('mod-date').value=state.userInfo.targetDate; document.getElementById('profile-modal').classList.remove('hidden'); document.getElementById('profile-modal').classList.add('flex'); }
-export function closeProfileModal() { document.getElementById('profile-modal').classList.add('hidden'); document.getElementById('profile-modal').classList.remove('flex'); }
-export function saveProfileModal() { state.userInfo = { weight: parseFloat(document.getElementById('mod-weight-user').value)||72.5, height: parseFloat(document.getElementById('mod-height').value)||173, targetBF: parseFloat(document.getElementById('mod-bf').value)||4.0, targetDate: document.getElementById('mod-date').value }; closeProfileModal(); triggerSave(showToast); finishInit(); showToast("프로필 저장 완료."); }
-
-// [개선 완료] 보충제 DB 목록 우측 끝으로 삭제 버튼 고정 및 텍스트 폼 정리
-export function renderCustomSupps() {
-    const container = document.getElementById('custom-supp-list'); container.innerHTML = '';
-    state.customSupps.forEach((supp, idx) => {
-        container.innerHTML += `
-        <div class="bg-slate-900 border border-slate-700 p-4 sm:p-5 rounded-xl flex flex-col gap-4">
-            <div class="flex items-center gap-3">
-                <input type="text" id="supp-name-${idx}" value="${supp.name}" placeholder="보충제 명칭" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-3 text-white font-bold focus:border-sky-500 outline-none text-base">
-                <button onclick="window.removeCustomSupp(${idx})" class="w-12 h-12 flex justify-center items-center bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg hover:bg-rose-500/20 transition-colors shrink-0" title="삭제"><span class="text-xl font-black">✕</span></button>
-            </div>
-            <div class="grid grid-cols-2 gap-3 text-sm">
-                <div class="flex items-center justify-between"><span class="text-slate-400">중량(g)</span><input type="number" id="supp-wt-${idx}" value="${supp.weight}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
-                <div class="flex items-center justify-between"><span class="text-slate-400">Kcal</span><input type="number" id="supp-k-${idx}" value="${supp.kcal}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
-                <div class="flex items-center justify-between"><span class="text-amber-500">탄(g)</span><input type="number" step="0.1" id="supp-c-${idx}" value="${supp.carbs}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
-                <div class="flex items-center justify-between"><span class="text-emerald-500">단(g)</span><input type="number" step="0.1" id="supp-p-${idx}" value="${supp.protein}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
-                <div class="flex items-center justify-between"><span class="text-sky-500">지(g)</span><input type="number" step="0.1" id="supp-f-${idx}" value="${supp.fat}" class="w-16 text-right bg-slate-800 rounded p-2 text-white"></div>
-            </div>
-        </div>`;
+function renderEditMealItems() {
+    const c = document.getElementById('edit-meal-items-container'); c.innerHTML = '';
+    state.editingMealState.items.forEach((item, idx) => {
+        const row = document.createElement('div'); row.className = "flex gap-2 items-center";
+        let opts = ''; Object.keys(state.foodCategories).forEach(cat => { opts += `<optgroup label="${cat}">`; state.foodCategories[cat].forEach(f => { opts += `<option value="${f}" ${f===item.name?'selected':''}>${f}</option>`; }); opts += `</optgroup>`; });
+        row.innerHTML = `<select class="food-select flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white outline-none">${opts}</select><div class="flex items-center gap-1 w-24 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1"><input type="number" class="food-amount w-full bg-transparent text-white text-right text-xs font-bold outline-none" value="${item.amount}"><span class="text-[10px] text-slate-500">g</span></div><button onclick="window.removeFoodRowFromModal(${idx})" class="text-slate-500 hover:text-rose-400 font-black px-1 text-xs">✕</button>`; c.appendChild(row);
     });
 }
-export function openMacroModal() { renderCustomSupps(); document.getElementById('macro-modal').classList.remove('hidden'); document.getElementById('macro-modal').classList.add('flex'); }
-export function closeMacroModal() { document.getElementById('macro-modal').classList.add('hidden'); document.getElementById('macro-modal').classList.remove('flex'); }
-export function addCustomSuppForm() { state.customSupps.push({ id: Date.now(), name: '새 보충제', weight: 30, kcal: 120, carbs: 3, protein: 20, fat: 1.5 }); renderCustomSupps(); }
-export function removeCustomSupp(idx) { state.customSupps.splice(idx, 1); renderCustomSupps(); }
-export function saveMacroModal() { 
-    let updatedSupps = [];
-    for(let i=0; i<state.customSupps.length; i++) {
-        let n = document.getElementById(`supp-name-${i}`).value || '보충제'+i;
-        updatedSupps.push({ id: state.customSupps[i].id, name: n, weight: parseFloat(document.getElementById(`supp-wt-${i}`).value)||30, kcal: parseFloat(document.getElementById(`supp-k-${i}`).value)||0, carbs: parseFloat(document.getElementById(`supp-c-${i}`).value)||0, protein: parseFloat(document.getElementById(`supp-p-${i}`).value)||0, fat: parseFloat(document.getElementById(`supp-f-${i}`).value)||0 });
-    }
-    state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId); showToast("보충제 DB 저장 완료."); 
-}
+window.addFoodRowToModal = () => { state.editingMealState.items.push({name: '백미', amount: 100}); renderEditMealItems(); };
+window.removeFoodRowFromModal = (idx) => { state.editingMealState.items.splice(idx, 1); renderEditMealItems(); };
 
-// -------------------------------------------------------------
-// [핵심] HTML 클릭 이벤트 인식을 위한 브라우저 글로벌 네임스페이스 바인딩
-// -------------------------------------------------------------
-window.switchMainTab = switchMainTab; window.loadPhase = loadPhase; window.cycleColor = cycleColor; window.toggleCollapse = toggleCollapse; window.updateMealField = updateMealField; window.updateItemName = updateItemName; window.updateItemAmount = updateItemAmount; window.adjAmt = adjAmt; window.addItem = addItem; window.deleteItem = deleteItem; window.deleteMeal = deleteMeal; 
-window.openPhaseModal = openPhaseModal; window.closePhaseModal = closePhaseModal; window.savePhaseModal = savePhaseModal; window.deletePhase = deletePhase; window.copyPhase = copyPhase; window.pastePhase = pastePhase;
-window.openEditMealModal = openEditMealModal; window.closeEditMealModal = closeEditMealModal; window.saveEditMealModal = saveEditMealModal;
-window.openProfileModal = openProfileModal; window.closeProfileModal = closeProfileModal; window.saveProfileModal = saveProfileModal; 
-window.openMacroModal = openMacroModal; window.closeMacroModal = closeMacroModal; window.saveMacroModal = saveMacroModal; window.addCustomSuppForm = addCustomSuppForm; window.removeCustomSupp = removeCustomSupp; window.runSmartCalc = runSmartCalc;
+window.openProfileModal = () => { document.getElementById('modal-prof-weight').value = state.userInfo.weight; document.getElementById('modal-prof-bf').value = state.userInfo.targetBF; document.getElementById('modal-prof-height').value = state.userInfo.height; document.getElementById('modal-prof-date').value = state.userInfo.targetDate; document.getElementById('profile-modal').classList.remove('hidden'); document.getElementById('profile-modal').classList.add('flex'); };
+window.closeProfileModal = () => { document.getElementById('profile-modal').classList.add('hidden'); document.getElementById('profile-modal').classList.remove('flex'); };
+window.saveProfileModal = () => { state.userInfo.weight = parseFloat(document.getElementById('modal-prof-weight').value)||70; state.userInfo.targetBF = parseFloat(document.getElementById('modal-prof-bf').value)||10; state.userInfo.height = parseFloat(document.getElementById('modal-prof-height').value)||175; state.userInfo.targetDate = document.getElementById('modal-prof-date').value; triggerSave(); finishInit(); window.closeProfileModal(); showToast("프로필 업데이트 완료."); };
+
+window.openMacroModal = () => { document.getElementById('calc-bmr').value = state.userInfo.bmr; document.getElementById('calc-c-target').value = state.userInfo.macros.c; document.getElementById('calc-p-target').value = state.userInfo.macros.p; document.getElementById('calc-f-target').value = state.userInfo.macros.f; document.getElementById('macro-modal').classList.remove('hidden'); document.getElementById('macro-modal').classList.add('flex'); renderCustomSuppsList(); window.runSmartCalc('all'); };
+window.closeMacroModal = () => { document.getElementById('macro-modal').classList.add('hidden'); document.getElementById('macro-modal').classList.remove('flex'); };
+window.saveMacroModal = () => { state.userInfo.bmr = parseInt(document.getElementById('calc-bmr').value)||1800; state.userInfo.macros.c = parseInt(document.getElementById('calc-c-target').value)||300; state.userInfo.macros.p = parseInt(document.getElementById('calc-p-target').value)||160; state.userInfo.macros.f = parseInt(document.getElementById('calc-f-target').value)||50; triggerSave(); finishInit(); window.closeMacroModal(); showToast("매크로 설정 적용 완료."); };
+
+window.runSmartCalc = (type) => {
+    if(type==='all') { const bmr = parseInt(document.getElementById('calc-bmr').value)||0; const act = parseFloat(document.getElementById('calc-activity').value)||1.55; document.getElementById('calc-tdee-result').innerText = Math.round(bmr * act) + " kcal"; }
+    else if(type==='carb') { const v = parseInt(document.getElementById('calc-c-target').value)||0; document.getElementById('calc-c-kcal').innerText = (v*4)+" kcal"; }
+    else if(type==='pro') { const v = parseInt(document.getElementById('calc-p-target').value)||0; document.getElementById('calc-p-kcal').innerText = (v*4)+" kcal"; }
+    else if(type==='fat') { const v = parseInt(document.getElementById('calc-f-target').value)||0; document.getElementById('calc-f-kcal').innerText = (v*9)+" kcal"; }
+    const c = parseInt(document.getElementById('calc-c-target').value)||0; const p = parseInt(document.getElementById('calc-p-target').value)||0; const f = parseInt(document.getElementById('calc-f-target').value)||0;
+    const total = (c*4)+(p*4)+(f*9); document.getElementById('calc-total-kcal').innerText = total + " kcal";
+};
+
+function renderCustomSuppsList() {
+    const c = document.getElementById('supp-list-container'); c.innerHTML = '';
+    state.customSupps.forEach((supp, i) => { const div = document.createElement('div'); div.className = "flex justify-between items-center bg-slate-900 border border-slate-700 p-2 rounded-lg text-xs"; div.innerHTML = `<span class="text-slate-300 font-bold">${supp.name} <span class="text-[10px] text-slate-500 ml-1">(${supp.weight}g 당 단백질 ${supp.protein}g)</span></span><button onclick="window.removeCustomSupp(${i})" class="text-rose-400 font-black px-2 hover:text-rose-500">삭제</button>`; c.appendChild(div); });
+}
+window.addCustomSuppForm = () => { const n = document.getElementById('supp-new-name').value; const w = parseFloat(document.getElementById('supp-new-weight').value); const p = parseFloat(document.getElementById('supp-new-pro').value); if(!n || !w || !p) { showToast("값을 모두 입력하세요."); return; } state.customSupps.push({name:n, weight:w, protein:p}); document.getElementById('supp-new-name').value = ''; document.getElementById('supp-new-weight').value = ''; document.getElementById('supp-new-pro').value = ''; triggerSave(); applyCustomSuppsToDB(); renderCustomSuppsList(); };
+window.removeCustomSupp = (idx) => { state.customSupps.splice(idx, 1); triggerSave(); applyCustomSuppsToDB(); renderCustomSuppsList(); };
+function initCalcDropdowns() {}
+
 window.exportData = () => exportDataJSON(showToast); window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("동기화 복원 성공."); }, () => showToast("비정상 백업 파일입니다."));
 
-// 스크롤 동적 고정 및 클라우드 부팅
 window.addEventListener('scroll', function() {
     const stickyBar = document.getElementById('sticky-macro-bar');
     if (window.scrollY > 350) { stickyBar.classList.remove('-translate-y-full', 'opacity-0', 'pointer-events-none'); stickyBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto'); } 
@@ -238,9 +212,8 @@ window.addEventListener('scroll', function() {
 });
 
 initializeFirebase((success) => {
+    requestPersistentStorage();
     const statusEl = document.getElementById('cloud-status');
-    if(success) statusEl.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> 클라우드 연결됨';
-    else statusEl.innerHTML = '<span class="w-1.5 h-1.5 bg-sky-500 rounded-full"></span> 로컬 스토리지 모드';
-    finishInit();
+    if (statusEl) { if (success) statusEl.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> 정상 연동'; else statusEl.innerHTML = '<span class="w-2 h-2 bg-sky-500 rounded-full"></span> 로컬 모드'; }
+    updateAccountStatusUI(); finishInit();
 });
-
