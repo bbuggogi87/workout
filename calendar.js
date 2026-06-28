@@ -1,27 +1,32 @@
 /**
  * 파일명: calendar.js
- * 역할: 알람 반복 속도 유저 커스텀 적용, 모바일 운동 정렬(SortableJS) 이관 및 역대 최고 기록(PR) 연산 모듈 통합
+ * 역할: 알람 반복 제어, 모바일 운동 카드 드래그 앤 드롭 정렬, 실시간 PR 감지 및 2단계 계층형 필터링 스크립트 통합
  */
 
 import { state } from './store.js';
 import { initializeFirebase, triggerSave, importDataJSON } from './services.js';
 import { WORKOUT_DB, AVAILABLE_PLATES, BAR_WEIGHT } from './workoutConstants.js';
 
+// 모듈 스코프 명시적 차트 인스턴스 선언 (런타임 에러 완전 예방)
+let chartBalance = null;
+let chartVolume = null;
+let chartWeight = null;
+
 let viewYear = 2026;
 let viewMonth = 5; 
 let restTimerInterval = null;
 let alarmAudioInterval = null;
 let libraryActivePart = '가슴';
+let libraryActiveType = '전체'; 
 let undoBuffer = null;
 let currentTimerSeconds = 0;
 let currentAlarmSound = '1';
 
-// [Step 3] 실시간 PR(Personal Record) 알림 중복 제어 및 초기 부팅 패스용 전역 상태 제어 변수
 window.isUserInteracting = false;
 let sessionPRTracker = { max1RM: {}, maxVolume: {} };
 
 // ==========================================
-// 전역 바인딩
+// 브라우저 전역 객체 바인딩
 // ==========================================
 window.switchCalendarTab = switchCalendarTab;
 window.runLibrarySearchFilter = runLibrarySearchFilter;
@@ -80,7 +85,7 @@ function getWorkoutData() {
 }
 
 // ==========================================
-// 설정 연동 (간격 포함)
+// 전역 시스템 가동 및 알람 인터벌 설정
 // ==========================================
 export function saveSystemSettings() {
     if(!state.userInfo) state.userInfo = {};
@@ -123,7 +128,7 @@ function loadSystemSettings() {
 }
 
 // ==========================================
-// 웹 오디오 API 기반 알람 합성기
+// 웹 오디오 API 신디사이저 엔진
 // ==========================================
 function playAudioTone(type) {
     try {
@@ -320,8 +325,6 @@ export function renderCalendarGrid() {
 
     for (let day = 1; day <= lastDate; day++) {
         const dayBtn = document.createElement('button');
-        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}–${String(day).padStart(2, '0')}`;
-        // 표준 대시 보정 연동
         const normalizedDateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         dayBtn.textContent = day;
         dayBtn.className = "p-3 rounded-xl font-bold text-sm transition-all flex flex-col items-center justify-center min-h-[52px] relative border border-transparent hover:border-slate-700 select-none";
@@ -393,6 +396,9 @@ export function saveRestTimerModal() {
     triggerSave(); closeRestTimerModal(); renderWorkoutList(); showToast("개별 알람 설정이 반영되었습니다.");
 }
 
+// ==========================================
+// 🔄 운동 기록 출력 및 모바일 수동 정렬 이관 수립
+// ==========================================
 export function renderWorkoutList() {
     const container = document.getElementById('workout-list-container');
     if(!container) return; container.innerHTML = '';
@@ -406,7 +412,7 @@ export function renderWorkoutList() {
     let dailyTotalVolume = 0;
     data.exercises.forEach((ex, exIdx) => {
         let max1RM = 0; 
-        let exVolume = 0; // 당일 해당 개별 종목의 누적 볼륨 추적기
+        let exVolume = 0; 
         let setsHtml = '';
         const currentRestTime = ex.restTime || state.userInfo?.defaultRestTime || 90;
 
@@ -440,7 +446,7 @@ export function renderWorkoutList() {
             </div>`;
         });
 
-        // [Step 3] 과거 모든 수행 기록 내역 전수 조사 알고리즘 연동 (현재 선택 일자 제외)
+        // 역대 PR 검증 알고리즘
         let historyMax1RM = 0;
         let historyMaxVolume = 0;
 
@@ -467,7 +473,6 @@ export function renderWorkoutList() {
         const isPRVolume = (historyMaxVolume > 0 && exVolume > historyMaxVolume);
         const prKey = `${state.selectedDateStr}_${ex.name}`;
 
-        // 세션 중복 토스트 팝업 억제 장치 적용 하에 감지 처리
         if (isPR1RM && (!sessionPRTracker.max1RM[prKey] || max1RM > sessionPRTracker.max1RM[prKey])) {
             sessionPRTracker.max1RM[prKey] = max1RM;
             if (window.isUserInteracting) {
@@ -482,7 +487,6 @@ export function renderWorkoutList() {
         }
 
         const card = document.createElement('div');
-        // PR 도달 여부에 의거한 입체 황금색 그라데이션 테두리 및 쉐도우 레이아웃 적용
         if (isPR1RM || isPRVolume) {
             card.className = "bg-gradient-to-b from-[#221706] to-[#0F172A] border-2 border-amber-500 rounded-2xl p-4 space-y-3 shadow-[0_4px_25px_rgba(245,158,11,0.2)]";
         } else {
@@ -491,7 +495,6 @@ export function renderWorkoutList() {
 
         const prBadge = (isPR1RM || isPRVolume) ? `<span class="px-2 py-0.5 text-[10px] font-black uppercase bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 rounded-md shadow-sm">🏆 PR 경신</span>` : '';
 
-        // [Step 2] 드래그 수동 정렬 배치를 위한 윈도우 무브 핸들 핸들러(☰) 구조 탑재
         card.innerHTML = `
             <div class="flex justify-between items-start border-b border-slate-800/60 pb-2">
                 <div class="flex items-center gap-2 mr-1 self-center">
@@ -522,7 +525,6 @@ export function renderWorkoutList() {
     const totalVolumeEl = document.getElementById('label-total-volume');
     if(totalVolumeEl) totalVolumeEl.innerText = `총 훈련 볼륨: ${dailyTotalVolume.toLocaleString()} kg`;
 
-    // [Step 2] SortableJS 엔진 인스턴스 마운팅 및 데이터 배열 물리 역산 치환 가동
     if (typeof Sortable !== 'undefined') {
         if (window.workoutSortable) { window.workoutSortable.destroy(); }
         window.workoutSortable = new Sortable(container, {
@@ -607,17 +609,27 @@ export function closeLibraryModal() {
     document.getElementById('library-modal').classList.add('hidden'); document.getElementById('library-modal').classList.remove('flex');
 }
 
+// ==========================================
+// 🧬 2단계 계층형 필터링 및 다빈도 추천 메인 엔진
+// ==========================================
 export function runLibrarySearchFilter() {
     const rawInput = document.getElementById('library-search-input').value.trim().toLowerCase();
     const input = rawInput.replace(/\s+/g, ''); 
     const grid = document.getElementById('library-master-card-grid'); grid.innerHTML = '';
     const filterBar = document.getElementById('library-filter-part-bar');
+    const typeBar = document.getElementById('library-filter-type-bar');
+
     if (filterBar.children.length === 0) {
         const parts = ['전체', ...Object.keys(WORKOUT_DB)];
         parts.forEach(p => {
             const pill = document.createElement('button'); pill.innerText = p;
             pill.className = `px-3 py-1.5 text-xs font-black rounded-full whitespace-nowrap transition-colors ${p === libraryActivePart ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`;
-            pill.onclick = () => { libraryActivePart = p; runLibrarySearchFilter(); }; filterBar.appendChild(pill);
+            pill.onclick = () => { 
+                libraryActivePart = p; 
+                libraryActiveType = '전체'; 
+                runLibrarySearchFilter(); 
+            }; 
+            filterBar.appendChild(pill);
         });
     } else {
         Array.from(filterBar.children).forEach(btn => {
@@ -626,22 +638,104 @@ export function runLibrarySearchFilter() {
         });
     }
 
+    if (typeBar) {
+        typeBar.innerHTML = '';
+        if (libraryActivePart === '전체') {
+            typeBar.classList.add('hidden');
+        } else {
+            typeBar.classList.remove('hidden');
+            const types = ['전체', ...Object.keys(WORKOUT_DB[libraryActivePart])];
+            types.forEach(t => {
+                const pill = document.createElement('button'); pill.innerText = t;
+                if (t === libraryActiveType) {
+                    pill.className = "px-2.5 py-1 text-[11px] font-black rounded-lg whitespace-nowrap transition-colors bg-amber-500/20 text-amber-400 border border-amber-500/40";
+                } else {
+                    pill.className = "px-2.5 py-1 text-[11px] font-bold rounded-lg whitespace-nowrap transition-colors bg-slate-900 text-slate-500 border border-slate-800/80 hover:text-slate-300";
+                }
+                pill.onclick = () => { 
+                    libraryActiveType = t; 
+                    runLibrarySearchFilter(); 
+                };
+                typeBar.appendChild(pill);
+            });
+        }
+    }
+
+    const frequencyMap = {};
+    Object.values(state.workouts).forEach(dateObj => {
+        if (dateObj.exercises) {
+            dateObj.exercises.forEach(ex => {
+                frequencyMap[ex.name] = (frequencyMap[ex.name] || 0) + 1;
+            });
+        }
+    });
+
+    let matchedExercises = [];
+
     Object.entries(WORKOUT_DB).forEach(([part, types]) => {
         if (libraryActivePart !== '전체' && part !== libraryActivePart) return;
         Object.entries(types).forEach(([type, names]) => {
+            if (libraryActiveType !== '전체' && type !== libraryActiveType) return;
             names.forEach(name => {
                 const cleanName = name.toLowerCase().replace(/\s+/g, '');
                 const chosung = getHangulChosung(name).toLowerCase().replace(/\s+/g, '');
                 if (input && !(cleanName.includes(input) || chosung.includes(input))) return;
-                const card = document.createElement('div');
-                card.className = "p-3 sm:p-4 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center";
-                card.innerHTML = `<div class="truncate mr-2"><span class="text-[10px] font-bold text-slate-500">${part}</span><h4 class="text-sm font-black text-slate-200 truncate">${name}</h4></div>
-                                  <button onclick="window.injectLibraryToToday('${part}', '${type}', '${name}')" class="px-3 py-2 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold rounded-lg transition-colors shrink-0">기록 추가</button>`;
-                grid.appendChild(card);
+                
+                matchedExercises.push({ part, type, name, freq: frequencyMap[name] || 0 });
             });
         });
     });
+
+    const favoriteExercises = matchedExercises
+        .filter(ex => ex.freq > 0)
+        .sort((a, b) => b.freq - a.freq)
+        .slice(0, 3);
+
+    if (favoriteExercises.length > 0) {
+        const favHeader = document.createElement('div');
+        favHeader.className = "col-span-1 sm:col-span-2 text-[11px] font-black text-amber-400 uppercase tracking-wider mt-1 mb-1 flex items-center gap-1 select-none";
+        favHeader.innerHTML = `⭐ 자주 하는 훈련 종목`;
+        grid.appendChild(favHeader);
+
+        favoriteExercises.forEach(ex => {
+            const card = document.createElement('div');
+            card.className = "p-3 sm:p-4 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 rounded-xl flex justify-between items-center shadow-md shadow-amber-500/5";
+            card.innerHTML = `
+                <div class="truncate mr-2">
+                    <span class="text-[9px] font-black uppercase bg-amber-500/20 text-amber-400 px-1 py-0.5 rounded mr-1">${ex.freq}회 수행</span>
+                    <span class="text-[10px] font-bold text-slate-500">${ex.part} · ${ex.type}</span>
+                    <h4 class="text-sm font-black text-amber-400 truncate mt-0.5">${ex.name}</h4>
+                </div>
+                <button onclick="window.injectLibraryToToday('${ex.part}', '${ex.type}', '${ex.name}')" class="px-3 py-2 bg-amber-500 text-slate-950 text-xs font-black rounded-lg transition-colors shrink-0 hover:bg-amber-400">기록 추가</button>
+            `;
+            grid.appendChild(card);
+        });
+
+        const divider = document.createElement('div');
+        divider.className = "col-span-1 sm:col-span-2 text-[11px] font-black text-slate-500 uppercase tracking-wider mt-3 mb-1 border-t border-slate-800/80 pt-3 select-none";
+        divider.innerHTML = `📚 전체 검색 결과`;
+        grid.appendChild(divider);
+    }
+
+    if (matchedExercises.length === 0) {
+        grid.innerHTML = `<p class="text-xs text-slate-500 py-8 text-center col-span-1 sm:col-span-2">조건에 부합하는 종목이 없습니다.</p>`;
+        return;
+    }
+
+    matchedExercises.forEach(ex => {
+        const card = document.createElement('div');
+        card.className = "p-3 sm:p-4 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center shadow-inner";
+        card.innerHTML = `
+            <div class="truncate mr-2">
+                <span class="text-[10px] font-bold text-slate-500">${ex.part} · ${ex.type}</span>
+                <h4 class="text-sm font-black text-slate-200 truncate mt-0.5">${ex.name}</h4>
+            </div>
+            <button onclick="window.injectLibraryToToday('${ex.part}', '${ex.type}', '${ex.name}')" class="px-3 py-2 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold rounded-lg transition-colors shrink-0">기록 추가</button>
+        `;
+        grid.appendChild(card);
+    });
 }
+
 export function injectLibraryToToday(part, type, name) {
     const data = getWorkoutData();
     if (!data.exercises.some(e => e.name === name)) {
@@ -838,6 +932,5 @@ initializeFirebase((success) => {
     loadSystemSettings();
     switchCalendarTab('tab-home');
 
-    // 초기 바인딩 로드 이후 발생하는 실시간 입력 변경점만을 PR 팝업 대상으로 필터링하기 위한 타이머 장치
     setTimeout(() => { window.isUserInteracting = true; }, 1000);
 });
