@@ -5,6 +5,7 @@ import { state } from './store.js';
 
 let saveTimeout = null;
 
+// 파이어베이스 프로젝트 구성 
 const firebaseConfig = {
     apiKey: "AIzaSyA1234567890-SampleKeyOnly",
     authDomain: "prep-master-pro.firebaseapp.com",
@@ -38,7 +39,8 @@ export function triggerSave() {
     saveTimeout = setTimeout(() => {
         if (state.userId && state.db) {
             const userDocRef = doc(state.db, "users", state.userId);
-            setDoc(userDocRef, { phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo, workouts: state.workouts, templates: state.templates, lastUpdated: new Date().toISOString() }, { merge: true }).catch(err => console.error("원격 동기화 실패:", err));
+            setDoc(userDocRef, { phases: state.phases, customSupps: state.customSupps, userInfo: state.userInfo, workouts: state.workouts, templates: state.templates, lastUpdated: new Date().toISOString() }, { merge: true })
+            .catch(err => console.error("원격 동기화 실패:", err));
         }
     }, 800);
 }
@@ -48,8 +50,8 @@ export async function loginWithGoogleBackend() {
     if (auth.currentUser && auth.currentUser.isAnonymous) {
         const result = await signInWithPopup(auth, provider);
         await linkWithCredential(auth.currentUser, GoogleAuthProvider.credentialFromResult(result));
-        state.userInfo.isPermanent = true; triggerSave(); return { success: true, mode: "linked" };
-    } else { await signInWithPopup(auth, provider); return { success: true, mode: "login" }; }
+        state.userInfo.isPermanent = true; state.userInfo.email = result.user.email; triggerSave(); return { success: true, mode: "linked" };
+    } else { const result = await signInWithPopup(auth, provider); return { success: true, mode: "login" }; }
 }
 
 export async function registerWithEmailBackend(email, password) {
@@ -74,7 +76,7 @@ export function initializeFirebase(onReadyCallback) {
     onAuthStateChanged(auth, async (user) => {
         if (user) {
             state.userId = user.uid; if (!state.userInfo) state.userInfo = {};
-            state.userInfo.isPermanent = !user.isAnonymous; if (!user.isAnonymous) state.userInfo.email = user.email || "Google Account";
+            state.userInfo.isPermanent = !user.isAnonymous; if (!user.isAnonymous) state.userInfo.email = user.email || "정식 계정";
 
             try {
                 const docSnap = await getDoc(doc(db, "users", user.uid));
