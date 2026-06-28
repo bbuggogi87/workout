@@ -1,7 +1,13 @@
 import { FOOD_DB, FOOD_CATEGORIES, INITIAL_USER_INFO, INITIAL_CUSTOM_SUPPS, INITIAL_PHASES } from './constants.js';
 
 export const state = {
+    // 공통 정보
     userInfo: JSON.parse(JSON.stringify(INITIAL_USER_INFO)),
+    userId: null, 
+    db: null, 
+    appId: 'prep-master-pro',
+
+    // 식단 플래너 전용 데이터
     phases: JSON.parse(JSON.stringify(INITIAL_PHASES)),
     currentPhaseId: 'p_1', 
     clipboardMeals: null, 
@@ -11,21 +17,19 @@ export const state = {
     foodDB: JSON.parse(JSON.stringify(FOOD_DB)), 
     foodCategories: JSON.parse(JSON.stringify(FOOD_CATEGORIES)),
     pieChartInstance: null, 
-    userId: null, 
-    db: null, 
-    appId: 'prep-master-pro',
 
-    // [신규 확장] 운동 일정 및 신체 계측 기록 상태 구조 추가
-    selectedDateStr: '', // 현재 선택된 날짜 키값 (YYYY-MM-DD)
-    workouts: {},        // 날짜별 종합 데이터 저장소 (구조: { 'YYYY-MM-DD': { weight, bf, smm, exercises: [] } })
-    templates: []        // 개인 맞춤 분할 루틴 프리셋 저장 배열
+    // 운동 캘린더 전용 데이터
+    selectedDateStr: '', 
+    workouts: {},        
+    templates: []        
 };
 
 export function applyCustomSuppsToDB() {
     state.foodCategories['보충제'] = [];
     state.customSupps.forEach(supp => {
-        if(supp.weight > 0) {
-            state.foodDB[supp.name] = { c: supp.carbs / supp.weight, p: supp.protein / supp.weight, f: supp.fat / supp.weight, k: supp.kcal / supp.weight };
+        if(supp.weight > 0 && supp.protein > 0) {
+            const macroRatio = { c: 0, p: supp.protein / supp.weight, f: 0, k: (supp.protein * 4) / supp.weight };
+            state.foodDB[supp.name] = macroRatio;
             state.foodCategories['보충제'].push(supp.name);
         }
     });
