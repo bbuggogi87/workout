@@ -1,6 +1,6 @@
 /**
  * 파일명: calendar.js
- * 역할: 알람 반복 속도 유저 커스텀 적용 및 전역 모듈 통제
+ * 역할: 알람 반복 속도 유저 커스텀 적용, 모바일 운동 정렬(SortableJS) 이관 및 역대 최고 기록(PR) 연산 모듈 통합
  */
 
 import { state } from './store.js';
@@ -15,6 +15,10 @@ let libraryActivePart = '가슴';
 let undoBuffer = null;
 let currentTimerSeconds = 0;
 let currentAlarmSound = '1';
+
+// [Step 3] 실시간 PR(Personal Record) 알림 중복 제어 및 초기 부팅 패스용 전역 상태 제어 변수
+window.isUserInteracting = false;
+let sessionPRTracker = { max1RM: {}, maxVolume: {} };
 
 // ==========================================
 // 전역 바인딩
@@ -81,7 +85,6 @@ function getWorkoutData() {
 export function saveSystemSettings() {
     if(!state.userInfo) state.userInfo = {};
     
-    // 설정 탭과 알람 탭 양쪽에서 값을 읽어와 병합 보정
     const setRest = document.getElementById('setting-default-rest');
     const setSound = document.getElementById('setting-default-sound');
     const setInt = document.getElementById('setting-default-interval');
@@ -90,7 +93,6 @@ export function saveSystemSettings() {
     if (setRest) state.userInfo.defaultRestTime = parseInt(setRest.value) || 90;
     if (setSound) state.userInfo.defaultAlarmSound = setSound.value || '1';
     
-    // 만약 현재 보이는 탭이 알람 탭이라면 알람 탭의 select 값을 우선 적용
     if (document.getElementById('pane-tab-alarm') && !document.getElementById('pane-tab-alarm').classList.contains('hidden')) {
         state.userInfo.alarmInterval = parseInt(alarmInt.value) || 1000;
     } else {
@@ -98,7 +100,7 @@ export function saveSystemSettings() {
     }
     
     triggerSave();
-    loadSystemSettings(); // 양쪽 UI 동기화
+    loadSystemSettings(); 
     showToast("시스템 설정이 적용되었습니다.");
 }
 
@@ -185,9 +187,7 @@ function triggerAlarmRing(soundType) {
     playAudioTone(soundType);
     if(alarmAudioInterval) clearInterval(alarmAudioInterval);
     
-    // 유저가 설정한 간격 값 호출 (기본 1.0초)
     let userInterval = state.userInfo?.alarmInterval || 1000;
-    
     alarmAudioInterval = setInterval(() => { playAudioTone(soundType); }, userInterval);
 }
 
@@ -240,7 +240,6 @@ export function startGlobalAlarm() {
     const soundType = document.getElementById('alarm-sound-select').value || '1';
     const interval = parseInt(document.getElementById('alarm-interval-select').value) || 1000;
     
-    // 시작과 동시에 설정 업데이트 강제 동기화
     if(!state.userInfo) state.userInfo = {};
     state.userInfo.defaultAlarmSound = soundType;
     state.userInfo.alarmInterval = interval;
@@ -321,21 +320,23 @@ export function renderCalendarGrid() {
 
     for (let day = 1; day <= lastDate; day++) {
         const dayBtn = document.createElement('button');
-        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}–${String(day).padStart(2, '0')}`;
+        // 표준 대시 보정 연동
+        const normalizedDateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         dayBtn.textContent = day;
         dayBtn.className = "p-3 rounded-xl font-bold text-sm transition-all flex flex-col items-center justify-center min-h-[52px] relative border border-transparent hover:border-slate-700 select-none";
 
-        const td = state.workouts[dateStr];
+        const td = state.workouts[normalizedDateStr];
         if (td && ((td.exercises && td.exercises.length > 0) || (td.weight > 0 || td.bf > 0 || td.smm > 0))) {
             const dot = document.createElement('span'); dot.className = "w-1.5 h-1.5 bg-amber-500 rounded-full absolute bottom-1.5"; dayBtn.appendChild(dot);
         }
-        if (dateStr === state.selectedDateStr) dayBtn.className += " active-day font-black text-slate-950";
+        if (normalizedDateStr === state.selectedDateStr) dayBtn.className += " active-day font-black text-slate-950";
         else {
             dayBtn.className += " bg-slate-800/40 text-slate-300";
             const dayOfWeek = new Date(viewYear, viewMonth, day).getDay();
             if (dayOfWeek === 0) dayBtn.className += " text-rose-400"; if (dayOfWeek === 6) dayBtn.className += " text-sky-400";
         }
-        dayBtn.onclick = () => selectWorkoutDate(dateStr);
+        dayBtn.onclick = () => selectWorkoutDate(normalizedDateStr);
         gridEl.appendChild(dayBtn);
     }
 }
@@ -404,11 +405,16 @@ export function renderWorkoutList() {
 
     let dailyTotalVolume = 0;
     data.exercises.forEach((ex, exIdx) => {
-        let max1RM = 0; let setsHtml = '';
+        let max1RM = 0; 
+        let exVolume = 0; // 당일 해당 개별 종목의 누적 볼륨 추적기
+        let setsHtml = '';
         const currentRestTime = ex.restTime || state.userInfo?.defaultRestTime || 90;
 
         ex.sets.forEach((set, setIdx) => {
-            if (set.done) dailyTotalVolume += (set.weight * set.reps);
+            if (set.done) {
+                dailyTotalVolume += (set.weight * set.reps);
+                exVolume += (set.weight * set.reps);
+            }
             const est1RM = set.weight * (1 + (set.reps / 30));
             if (est1RM > max1RM) max1RM = est1RM;
 
@@ -434,17 +440,76 @@ export function renderWorkoutList() {
             </div>`;
         });
 
+        // [Step 3] 과거 모든 수행 기록 내역 전수 조사 알고리즘 연동 (현재 선택 일자 제외)
+        let historyMax1RM = 0;
+        let historyMaxVolume = 0;
+
+        Object.entries(state.workouts).forEach(([dateStr, dayData]) => {
+            if (dateStr === state.selectedDateStr) return; 
+            if (!dayData.exercises) return;
+            dayData.exercises.forEach(historicalEx => {
+                if (historicalEx.name !== ex.name) return;
+                let dayExVolume = 0;
+                if (historicalEx.sets) {
+                    historicalEx.sets.forEach(s => {
+                        if (s.done) {
+                            const est1RM = s.weight * (1 + (s.reps / 30));
+                            if (est1RM > historyMax1RM) historyMax1RM = est1RM;
+                            dayExVolume += s.weight * s.reps;
+                        }
+                    });
+                }
+                if (dayExVolume > historyMaxVolume) historyMaxVolume = dayExVolume;
+            });
+        });
+
+        const isPR1RM = (historyMax1RM > 0 && max1RM > historyMax1RM);
+        const isPRVolume = (historyMaxVolume > 0 && exVolume > historyMaxVolume);
+        const prKey = `${state.selectedDateStr}_${ex.name}`;
+
+        // 세션 중복 토스트 팝업 억제 장치 적용 하에 감지 처리
+        if (isPR1RM && (!sessionPRTracker.max1RM[prKey] || max1RM > sessionPRTracker.max1RM[prKey])) {
+            sessionPRTracker.max1RM[prKey] = max1RM;
+            if (window.isUserInteracting) {
+                showToast(`🏆 최고 기록 경신! [${ex.name}] 역대 최고 1RM 돌파: ${max1RM.toFixed(1)}kg`);
+            }
+        }
+        if (isPRVolume && (!sessionPRTracker.maxVolume[prKey] || exVolume > sessionPRTracker.maxVolume[prKey])) {
+            sessionPRTracker.maxVolume[prKey] = exVolume;
+            if (window.isUserInteracting) {
+                showToast(`🔥 최고 볼륨 경신! [${ex.name}] 역대 최고 훈련 볼륨 돌파: ${exVolume.toLocaleString()}kg`);
+            }
+        }
+
         const card = document.createElement('div');
-        card.className = "bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 space-y-3";
+        // PR 도달 여부에 의거한 입체 황금색 그라데이션 테두리 및 쉐도우 레이아웃 적용
+        if (isPR1RM || isPRVolume) {
+            card.className = "bg-gradient-to-b from-[#221706] to-[#0F172A] border-2 border-amber-500 rounded-2xl p-4 space-y-3 shadow-[0_4px_25px_rgba(245,158,11,0.2)]";
+        } else {
+            card.className = "bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 space-y-3";
+        }
+
+        const prBadge = (isPR1RM || isPRVolume) ? `<span class="px-2 py-0.5 text-[10px] font-black uppercase bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 rounded-md shadow-sm">🏆 PR 경신</span>` : '';
+
+        // [Step 2] 드래그 수동 정렬 배치를 위한 윈도우 무브 핸들 핸들러(☰) 구조 탑재
         card.innerHTML = `
             <div class="flex justify-between items-start border-b border-slate-800/60 pb-2">
-                <div class="flex-1">
-                    <span class="px-2 py-0.5 text-[10px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md">${ex.part} · ${ex.type}</span>
+                <div class="flex items-center gap-2 mr-1 self-center">
+                    <div class="workout-drag-handle text-slate-500 hover:text-slate-300 cursor-move text-base font-bold select-none px-1 py-0.5">☰</div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="px-2 py-0.5 text-[10px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md">${ex.part} · ${ex.type}</span>
+                        ${prBadge}
+                    </div>
                     <div class="flex flex-wrap items-center gap-2 mt-1.5 mb-1">
-                        <h3 class="text-sm font-black text-white">${ex.name}</h3>
+                        <h3 class="text-sm font-black text-white truncate">${ex.name}</h3>
                         <span onclick="window.openRestTimerModal(${exIdx})" class="text-[10px] font-bold bg-slate-800 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-1 rounded-md cursor-pointer transition-colors active:scale-95">⏱️ Rest Timer (${currentRestTime} sec)</span>
                     </div>
-                    <p class="text-[10px] text-slate-400 font-medium">1RM 추정: ${max1RM > 0 ? max1RM.toFixed(1) + 'kg' : '---'}</p>
+                    <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-400 font-medium">
+                        <p>1RM 추정: ${max1RM > 0 ? max1RM.toFixed(1) + 'kg' : '---'}</p>
+                        <p>종목 볼륨: ${exVolume.toLocaleString()}kg</p>
+                    </div>
                 </div>
                 <button onclick="window.deleteExercise(${exIdx})" class="text-[11px] px-2 py-1 bg-slate-800 border border-slate-700 text-slate-400 hover:text-rose-400 rounded-md shrink-0">삭제</button>
             </div>
@@ -456,6 +521,23 @@ export function renderWorkoutList() {
 
     const totalVolumeEl = document.getElementById('label-total-volume');
     if(totalVolumeEl) totalVolumeEl.innerText = `총 훈련 볼륨: ${dailyTotalVolume.toLocaleString()} kg`;
+
+    // [Step 2] SortableJS 엔진 인스턴스 마운팅 및 데이터 배열 물리 역산 치환 가동
+    if (typeof Sortable !== 'undefined') {
+        if (window.workoutSortable) { window.workoutSortable.destroy(); }
+        window.workoutSortable = new Sortable(container, {
+            handle: '.workout-drag-handle', animation: 250, ghostClass: 'opacity-10',
+            delay: 150, delayOnTouchOnly: true,
+            onEnd: function (evt) {
+                const oldIdx = evt.oldIndex; const newIdx = evt.newIndex; if (oldIdx === newIdx) return;
+                const dData = getWorkoutData();
+                const movedItem = dData.exercises.splice(oldIdx, 1)[0];
+                dData.exercises.splice(newIdx, 0, movedItem);
+                triggerSave();
+                setTimeout(() => renderWorkoutList(), 10);
+            }
+        });
+    }
 }
 
 export function addSet(exIdx) {
@@ -755,4 +837,7 @@ initializeFirebase((success) => {
     selectWorkoutDate(`${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
     loadSystemSettings();
     switchCalendarTab('tab-home');
+
+    // 초기 바인딩 로드 이후 발생하는 실시간 입력 변경점만을 PR 팝업 대상으로 필터링하기 위한 타이머 장치
+    setTimeout(() => { window.isUserInteracting = true; }, 1000);
 });
