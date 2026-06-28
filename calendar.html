@@ -314,7 +314,8 @@
             <span class="text-slate-500 pl-1">🔍</span>
             <input type="text" id="library-search-input" oninput="window.runLibrarySearchFilter()" placeholder="초성 및 띄어쓰기 무시 검색" class="w-full bg-transparent text-sm text-white outline-none font-bold">
         </div>
-        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-2 border-b border-slate-800 shrink-0" id="library-filter-part-bar"></div>
+        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-1 shrink-0" id="library-filter-part-bar"></div>
+        <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-2 border-b border-slate-800/60 shrink-0 hidden" id="library-filter-type-bar"></div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 overflow-y-auto custom-scrollbar pr-1 flex-1 min-h-[40vh]" id="library-master-card-grid"></div>
         <button onclick="window.closeLibraryModal()" class="w-full py-3 mt-4 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">닫기 (기록 탭으로 돌아가기)</button>
     </div>
