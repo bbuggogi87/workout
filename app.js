@@ -1,21 +1,22 @@
 /**
  * 파일명: app.js
- * 역할: 식단 플래너 & 훈련 일지 SPA 통합 컨트롤러 및 이벤트 바인딩
+ * 역할: 식단 및 운동 PWA 기능 통합 제어, 차트 렌더링, 정식 인증 UI 액션 브릿지 총괄
  */
 
 import { state, applyCustomSuppsToDB } from './store.js';
 import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON, loginWithGoogleBackend, registerWithEmailBackend, loginWithEmailBackend, logoutUserBackend } from './services.js';
 import { WORKOUT_DB, AVAILABLE_PLATES, BAR_WEIGHT } from './workoutConstants.js';
 
-let chartBalance = null; let chartVolume = null; let chartWeight = null;
-let viewYear = 2026; let viewMonth = 5; 
+// 차트 파괴 및 재매핑용 인스턴스 격리 상태 초깃값 선언
+let chartBalance = null; let chartVolume = null;
+viewYear = 2026; viewMonth = 5; 
 let restTimerInterval = null; let alarmAudioInterval = null;
 let libraryActivePart = '가슴'; let libraryActiveType = '전체'; 
 let undoBuffer = null; let currentTimerSeconds = 0; let currentAlarmSound = '1';
 window.isUserInteracting = false; let sessionPRTracker = { max1RM: {}, maxVolume: {} };
 
 // ==========================================
-// 공통 UI / 토스트 / 네비게이션 제어
+// 공통 UI / 토스트 / 네비게이션 핵심 인터페이스
 // ==========================================
 export function showToast(msg) { 
     const t = document.getElementById('toast'); document.getElementById('toast-text').innerText = msg; 
@@ -26,7 +27,6 @@ export function showToast(msg) {
 window.switchMainView = (viewId) => {
     document.querySelectorAll('.app-view').forEach(el => { el.classList.remove('block'); el.classList.add('hidden'); });
     document.getElementById('view-' + viewId).classList.remove('hidden'); document.getElementById('view-' + viewId).classList.add('block');
-    
     document.querySelectorAll('.nav-tab-btn').forEach(btn => btn.classList.remove('active-nav-btn'));
     document.getElementById('tab-' + viewId).classList.add('active-nav-btn');
     
@@ -38,14 +38,14 @@ window.switchMainView = (viewId) => {
 };
 
 // ==========================================
-// 🛡️ 통합 인증 및 데이터 보호 로직
+// 🛡️ 영구 보존 세션 인증 브릿지 액션 스크립트
 // ==========================================
 async function requestPersistentStorage() {
     if (navigator.storage && navigator.storage.persist) {
-        try { const isPersisted = await navigator.storage.persisted(); if (!isPersisted) await navigator.storage.persist(); } 
-        catch(e) {}
+        try { const isPersisted = await navigator.storage.persisted(); if (!isPersisted) await navigator.storage.persist(); } catch(e) {}
     }
 }
+
 function updateAccountStatusUI() {
     const badge = document.getElementById('account-status-badge');
     const bG = document.getElementById('btn-google-auth'); const bE = document.getElementById('btn-email-auth'); const bL = document.getElementById('btn-logout-auth');
@@ -62,39 +62,33 @@ function updateAccountStatusUI() {
 }
 
 window.triggerGoogleLogin = async () => {
-    try { const res = await loginWithGoogleBackend(); if(res.mode === "linked") showToast("기존 익명 데이터가 구글 계정으로 이관되었습니다."); else showToast("구글 계정 연동 완료."); updateAccountStatusUI(); finishInit(); } 
-    catch(err) { showToast("구글 로그인 취소: 모바일 브라우저 도메인을 확인하세요."); }
+    try { const res = await loginWithGoogleBackend(); if(res.mode === "linked") showToast("🚀 데이터가 안전하게 구글 계정으로 이관 연동되었습니다."); else showToast("구글 클라우드 동기화 완료."); updateAccountStatusUI(); finishInit(); } 
+    catch(err) { showToast("구글 인증 처리가 유저에 의해 중단되었습니다."); }
 };
 window.openEmailAuthModal = () => { document.getElementById('auth-email-input').value = ''; document.getElementById('auth-password-input').value = ''; document.getElementById('email-auth-modal').classList.remove('hidden'); document.getElementById('email-auth-modal').classList.add('flex'); };
 window.closeEmailAuthModal = () => { document.getElementById('email-auth-modal').classList.add('hidden'); document.getElementById('email-auth-modal').classList.remove('flex'); };
 window.submitEmailRegister = async () => {
     const e = document.getElementById('auth-email-input').value.trim(); const p = document.getElementById('auth-password-input').value.trim();
-    if(!e || p.length < 6) { showToast("이메일과 6자리 패스워드가 필요합니다."); return; }
-    try { await registerWithEmailBackend(e, p); showToast("계정 생성 및 데이터 이관 완료."); window.closeEmailAuthModal(); updateAccountStatusUI(); finishInit(); } catch(err) { showToast("가입 실패. 다시 확인하세요."); }
+    if(!e || p.length < 6) { showToast("정확한 이메일 형식과 6자리 이상의 암호 지정이 필요합니다."); return; }
+    try { await registerWithEmailBackend(e, p); showToast("정식 계정 연동 가입이 완료되었습니다."); window.closeEmailAuthModal(); updateAccountStatusUI(); finishInit(); } catch(err) { showToast("계정 생성 실패: 규격을 재정비하십시오."); }
 };
 window.submitEmailLogin = async () => {
     const e = document.getElementById('auth-email-input').value.trim(); const p = document.getElementById('auth-password-input').value.trim();
     if(!e || !p) return;
-    try { await loginWithEmailBackend(e, p); showToast("로그인 성공. 동기화 중..."); window.closeEmailAuthModal(); updateAccountStatusUI(); finishInit(); } catch(err) { showToast("로그인 실패."); }
+    try { await loginWithEmailBackend(e, p); showToast("인증 성공. 통합 원격 데이터 수립 완료."); window.closeEmailAuthModal(); updateAccountStatusUI(); finishInit(); } catch(err) { showToast("로그인 실패: 자격 증명을 점검하십시오."); }
 };
-window.triggerLogout = async () => { if(confirm("로컬 캐시가 삭제됩니다. 안전하게 로그아웃 하시겠습니까?")) await logoutUserBackend(); };
+window.triggerLogout = async () => { if(confirm("로그아웃 실행 시 장치 복사본 데이터가 보존을 위해 일시 마운트 해제됩니다. 진행할까요?")) await logoutUserBackend(); };
 
 // ==========================================
-// 🥑 식단 플래너 전용 로직
+// 🥑 식단 도메인 메인 코어 연산 엔진
 // ==========================================
 export function finishInit() { 
-    // 프로필 정보 양방향 동기화
-    document.getElementById('prof-weight-display').innerText = state.userInfo.weight; document.getElementById('prof-bf-display').innerText = state.userInfo.targetBF + '%';
+    document.getElementById('prof-weight-display').innerText = state.userInfo.weight + "kg"; 
+    document.getElementById('prof-bf-display').innerText = state.userInfo.targetBF + '%';
     if(state.userInfo.targetDate) document.getElementById('badge-target-date').innerText = state.userInfo.targetDate.substring(5).replace('-','/');
     
-    // 식단 부팅
     applyCustomSuppsToDB(); renderPhaseNav();
     if(state.phases.length > 0) loadPhase(state.currentPhaseId || state.phases[0].id); 
-    
-    // 일지 부팅
-    calculateWorkoutDDay();
-    const today = new Date(); viewYear = today.getFullYear(); viewMonth = today.getMonth();
-    selectWorkoutDate(`${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
 }
 
 function renderPhaseNav() {
@@ -118,7 +112,7 @@ function renderMeals() {
     const phase = state.phases.find(p => p.id === state.currentPhaseId); const c = document.getElementById('meal-cards-container'); c.innerHTML = '';
     if(!phase) return;
     let phaseC = 0, phaseP = 0, phaseF = 0, phaseKcal = 0;
-    let srcC = {}, srcP = {}, srcF = {}; // 출처 누적 객체
+    let srcC = {}, srcP = {}, srcF = {}; 
 
     phase.meals.forEach((meal, mealIdx) => {
         let mC = 0, mP = 0, mF = 0, mKcal = 0; let itemsHtml = '';
@@ -155,7 +149,7 @@ function renderMeals() {
     });
 
     const addCard = document.createElement('div'); addCard.className = "glass-panel p-3 rounded-2xl border border-dashed border-slate-700 flex justify-center items-center hover:bg-slate-800/40 transition-colors cursor-pointer";
-    addCard.innerHTML = `<span class="text-xs font-bold text-amber-500">+ 일정 추가</span>`; addCard.onclick = () => window.openEditMealModal(-1); c.appendChild(addCard);
+    addCard.innerHTML = `<span class="text-xs font-bold text-amber-500">+ 새로운 식사/일정 추가</span>`; addCard.onclick = () => window.openEditMealModal(-1); c.appendChild(addCard);
 
     if(typeof Sortable !== 'undefined') {
         if(window.mealSortable) window.mealSortable.destroy();
@@ -167,7 +161,7 @@ function renderMeals() {
 
 function updateSummary(c, p, f, kcal) {
     document.getElementById('total-c').innerText = c.toFixed(1) + 'g'; document.getElementById('total-p').innerText = p.toFixed(1) + 'g'; document.getElementById('total-f').innerText = f.toFixed(1) + 'g'; 
-    document.getElementById('total-kcal').innerHTML = `${kcal.toFixed(0)}`; document.getElementById('compact-kcal').innerText = `${kcal.toFixed(0)} kcal`;
+    document.getElementById('total-kcal').innerHTML = `${kcal.toFixed(0)} <span class="text-xs text-slate-500">kcal</span>`; document.getElementById('compact-kcal').innerText = `${kcal.toFixed(0)} kcal`;
     document.getElementById('compact-c').innerText = c.toFixed(0); document.getElementById('compact-p').innerText = p.toFixed(0); document.getElementById('compact-f').innerText = f.toFixed(0);
     
     let tC = parseFloat(document.getElementById('calc-c-target').value) || 300; let tP = parseFloat(document.getElementById('calc-p-target').value) || 160; let tF = parseFloat(document.getElementById('calc-f-target').value) || 50;
@@ -179,29 +173,28 @@ function updateSummary(c, p, f, kcal) {
     state.pieChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: [`탄수화물 ${pC}%`, `단백질 ${pP}%`, `지방 ${pF}%`], datasets: [{ data: [c*4, p*4, f*9], backgroundColor: ['#F59E0B', '#10B981', '#0EA5E9'], borderWidth: 0, hoverOffset: 4 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: '#F8FAFC', font: { size: 10, family: 'Pretendard' }, boxWidth: 10 } } } } });
 }
 
-// [복원] 영양소 출처 분석 로직
 function renderSrcBreakdown(totC, totP, totalF, srcC, srcP, srcF) {
-    const renderList = (domId, srcObj, total, colorHex) => {
+    const renderList = (domId, srcObj, total) => {
         const dom = document.getElementById(domId); dom.innerHTML = '';
         const sorted = Object.entries(srcObj).filter(x => x[1] > 0.5).sort((a,b) => b[1] - a[1]);
+        if(sorted.length === 0) { dom.innerHTML = `<p class="text-[10px] text-slate-600">제공원료 없음</p>`; return; }
         sorted.forEach(([name, val]) => {
             const perc = total > 0 ? ((val/total)*100).toFixed(1) : 0;
-            dom.innerHTML += `<div class="flex items-center justify-between text-[11px] mb-1"><span class="text-slate-300 font-bold truncate pr-2">${name}</span><div class="flex items-center gap-2"><span class="text-white font-black">${val.toFixed(1)}g</span><span class="text-slate-500 w-8 text-right">${perc}%</span></div></div>`;
+            dom.innerHTML += `<div class="flex items-center justify-between text-[11px] mb-1"><span class="text-slate-300 font-bold truncate pr-2">${name}</span><div class="flex items-center gap-1.5"><span class="text-white font-black">${val.toFixed(1)}g</span><span class="text-slate-500 w-8 text-right">${perc}%</span></div></div>`;
         });
     };
-    document.getElementById('src-total-c').innerText = `${totC.toFixed(1)}g`; renderList('src-list-c', srcC, totC, '#F59E0B');
-    document.getElementById('src-total-p').innerText = `${totP.toFixed(1)}g`; renderList('src-list-p', srcP, totP, '#10B981');
-    document.getElementById('src-total-f').innerText = `${totalF.toFixed(1)}g`; renderList('src-list-f', srcF, totalF, '#0EA5E9');
+    document.getElementById('src-total-c').innerText = `${totC.toFixed(1)}g`; renderList('src-list-c', srcC, totC);
+    document.getElementById('src-total-p').innerText = `${totP.toFixed(1)}g`; renderList('src-list-p', srcP, totP);
+    document.getElementById('src-total-f').innerText = `${totalF.toFixed(1)}g`; renderList('src-list-f', srcF, totalF);
 }
 
-// 식단 이벤트 바인딩
 window.adjFoodAmount = (mealIdx, itemIdx, delta) => { const phase = state.phases.find(p => p.id === state.currentPhaseId); phase.meals[mealIdx].items[itemIdx].amount += delta; if(phase.meals[mealIdx].items[itemIdx].amount < 0) phase.meals[mealIdx].items[itemIdx].amount = 0; triggerSave(); renderMeals(); };
 window.removeFoodItem = (mealIdx, itemIdx) => { const phase = state.phases.find(p => p.id === state.currentPhaseId); phase.meals[mealIdx].items.splice(itemIdx, 1); triggerSave(); renderMeals(); };
 window.deleteMeal = (mealIdx) => { if(confirm("삭제하시겠습니까?")) { const phase = state.phases.find(p => p.id === state.currentPhaseId); phase.meals.splice(mealIdx, 1); triggerSave(); renderMeals(); } };
 
 window.openEditMealModal = (mealIdx) => {
     const phase = state.phases.find(p => p.id === state.currentPhaseId); document.getElementById('edit-meal-modal').classList.remove('hidden'); document.getElementById('edit-meal-modal').classList.add('flex');
-    if(mealIdx === -1) { state.editingMealState = { label: '새 일정', time: '12:00', color: 'slate', explain: '', supps: '', isWorkout: false, items: [] }; document.getElementById('edit-meal-title').innerText = "새 식사 추가"; } 
+    if(mealIdx === -1) { state.editingMealState = { label: '새 식사', time: '12:00', color: 'slate', explain: '', supps: '', isWorkout: false, items: [] }; document.getElementById('edit-meal-title').innerText = "새 식사 추가"; } 
     else { state.editingMealState = JSON.parse(JSON.stringify(phase.meals[mealIdx])); state.editingMealState._originalIdx = mealIdx; document.getElementById('edit-meal-title').innerText = "식사 편집"; }
     document.getElementById('edit-meal-label').value = state.editingMealState.label; document.getElementById('edit-meal-time').value = state.editingMealState.time; document.getElementById('edit-meal-color').value = state.editingMealState.color || 'slate'; document.getElementById('edit-meal-explain').value = state.editingMealState.explain || ''; document.getElementById('edit-meal-supps').value = state.editingMealState.supps || ''; document.getElementById('edit-meal-isworkout').checked = state.editingMealState.isWorkout || false;
     renderEditMealItems();
@@ -226,16 +219,13 @@ window.addFoodRowToModal = () => { state.editingMealState.items.push({name: '백
 
 window.openProfileModal = () => { document.getElementById('modal-prof-weight').value = state.userInfo.weight; document.getElementById('modal-prof-bf').value = state.userInfo.targetBF; document.getElementById('modal-prof-height').value = state.userInfo.height; document.getElementById('modal-prof-date').value = state.userInfo.targetDate; document.getElementById('profile-modal').classList.remove('hidden'); document.getElementById('profile-modal').classList.add('flex'); };
 window.closeProfileModal = () => { document.getElementById('profile-modal').classList.add('hidden'); document.getElementById('profile-modal').classList.remove('flex'); };
-window.saveProfileModal = () => { state.userInfo.weight = parseFloat(document.getElementById('modal-prof-weight').value)||70; state.userInfo.targetBF = parseFloat(document.getElementById('modal-prof-bf').value)||10; state.userInfo.height = parseFloat(document.getElementById('modal-prof-height').value)||175; state.userInfo.targetDate = document.getElementById('modal-prof-date').value; triggerSave(); finishInit(); window.closeProfileModal(); showToast("프로필 업데이트 완료."); };
+window.saveProfileModal = () => { state.userInfo.weight = parseFloat(document.getElementById('modal-prof-weight').value)||70; state.userInfo.targetBF = parseFloat(document.getElementById('modal-prof-bf').value)||10; state.userInfo.height = parseFloat(document.getElementById('modal-prof-height').value)||175; state.userInfo.targetDate = document.getElementById('modal-prof-date').value; triggerSave(); finishInit(); window.closeProfileModal(); showToast("프로필 구성요소가 갱신되었습니다."); };
 
 window.openMacroModal = () => { document.getElementById('calc-bmr').value = state.userInfo.bmr; document.getElementById('calc-c-target').value = state.userInfo.macros.c; document.getElementById('calc-p-target').value = state.userInfo.macros.p; document.getElementById('calc-f-target').value = state.userInfo.macros.f; document.getElementById('macro-modal').classList.remove('hidden'); document.getElementById('macro-modal').classList.add('flex'); renderCustomSuppsList(); window.runSmartCalc('all'); };
 window.closeMacroModal = () => { document.getElementById('macro-modal').classList.add('hidden'); document.getElementById('macro-modal').classList.remove('flex'); };
-window.saveMacroModal = () => { state.userInfo.bmr = parseInt(document.getElementById('calc-bmr').value)||1800; state.userInfo.macros.c = parseInt(document.getElementById('calc-c-target').value)||300; state.userInfo.macros.p = parseInt(document.getElementById('calc-p-target').value)||160; state.userInfo.macros.f = parseInt(document.getElementById('calc-f-target').value)||50; triggerSave(); finishInit(); window.closeMacroModal(); showToast("매크로 설정 적용 완료."); };
+window.saveMacroModal = () => { state.userInfo.bmr = parseInt(document.getElementById('calc-bmr').value)||1800; state.userInfo.macros.c = parseInt(document.getElementById('calc-c-target').value)||300; state.userInfo.macros.p = parseInt(document.getElementById('calc-p-target').value)||160; state.userInfo.macros.f = parseInt(document.getElementById('calc-f-target').value)||50; triggerSave(); finishInit(); window.closeMacroModal(); showToast("기초 대사 세팅값이 반영되었습니다."); };
 window.runSmartCalc = (type) => {
     if(type==='all') { const bmr = parseInt(document.getElementById('calc-bmr').value)||0; const act = parseFloat(document.getElementById('calc-activity').value)||1.55; document.getElementById('calc-tdee-result').innerText = Math.round(bmr * act) + " kcal"; }
-    else if(type==='carb') { const v = parseInt(document.getElementById('calc-c-target').value)||0; document.getElementById('calc-c-kcal').innerText = (v*4)+" kcal"; }
-    else if(type==='pro') { const v = parseInt(document.getElementById('calc-p-target').value)||0; document.getElementById('calc-p-kcal').innerText = (v*4)+" kcal"; }
-    else if(type==='fat') { const v = parseInt(document.getElementById('calc-f-target').value)||0; document.getElementById('calc-f-kcal').innerText = (v*9)+" kcal"; }
 };
 
 function renderCustomSuppsList() { const c = document.getElementById('supp-list-container'); c.innerHTML = ''; state.customSupps.forEach((supp, i) => { const div = document.createElement('div'); div.className = "flex justify-between items-center bg-slate-900 border border-slate-700 p-1.5 rounded text-[10px]"; div.innerHTML = `<span class="text-slate-300 font-bold">${supp.name} <span class="text-slate-500">(${supp.weight}g 당 단백질 ${supp.protein}g)</span></span><button onclick="window.removeCustomSupp(${i})" class="text-rose-400 font-black px-2">✕</button>`; c.appendChild(div); }); }
@@ -243,10 +233,8 @@ window.addCustomSuppForm = () => { const n = document.getElementById('supp-new-n
 window.removeCustomSupp = (idx) => { state.customSupps.splice(idx, 1); triggerSave(); applyCustomSuppsToDB(); renderCustomSuppsList(); };
 
 // ==========================================
-// 🏋️ 훈련 일지 캘린더 전용 로직
+// 🏋️ 훈련 일지 및 개별 오디오 알람 HUD 엔진
 // ==========================================
-function getWorkoutData() { let data = state.workouts[state.selectedDateStr]; if (!data) { data = { weight: 0, bf: 0, smm: 0, exercises: [] }; state.workouts[state.selectedDateStr] = data; } if (!data.exercises) data.exercises = []; return data; }
-
 function calculateWorkoutDDay() {
     const target = new Date(state.userInfo.targetDate || '2026-07-18'); const today = new Date();
     const diffDays = Math.ceil((new Date(target.getFullYear(), target.getMonth(), target.getDate()) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / (1000 * 60 * 60 * 24));
@@ -288,17 +276,39 @@ function renderWorkoutList() {
                 <span class="font-black text-amber-500 w-3 text-center">${setIdx + 1}</span>
                 <select onchange="window.changeSetField(${exIdx}, ${setIdx}, 'type', event.target.value)" class="bg-slate-900 border border-slate-700 rounded px-1 text-slate-300 outline-none"><option value="일반" ${set.type==='일반'?'selected':''}>일반</option><option value="탑" ${set.type==='탑'?'selected':''}>탑</option><option value="백오프" ${set.type==='백오프'?'selected':''}>백오프</option><option value="드롭" ${set.type==='드롭'?'selected':''}>드롭</option></select>
                 <div class="flex items-center bg-slate-900 border border-slate-700 rounded shadow-inner"><button onclick="window.adjSetVal(${exIdx}, ${setIdx}, 'weight', -2.5)" class="w-5 h-5 text-slate-400 font-bold hover:text-white select-none">−</button><input type="number" step="0.1" oninput="window.changeSetField(${exIdx}, ${setIdx}, 'weight', event.target.value)" class="w-8 bg-transparent text-center font-bold text-white outline-none" value="${set.weight}"><button onclick="window.adjSetVal(${exIdx}, ${setIdx}, 'weight', 2.5)" class="w-5 h-5 text-slate-400 font-bold hover:text-white select-none">＋</button></div>
-                <div class="flex items-center bg-slate-900 border border-slate-700 rounded shadow-inner"><button onclick="window.adjSetVal(${exIdx}, ${setIdx}, 'reps', -1)" class="w-5 h-5 text-slate-400 font-bold hover:text-white select-none">−</button><input type="number" oninput="window.changeSetField(${exIdx}, ${setIdx}, 'reps', event.target.value)" class="w-6 bg-transparent text-center font-bold text-white outline-none" value="${set.reps}"><button onclick="window.adjSetVal(${exIdx}, ${setIdx}, 'reps', 1)" class="w-5 h-5 text-slate-400 font-bold hover:text-white select-none">＋</button></div>
+                <div class="flex items-center bg-slate-900 border border-slate-700 rounded shadow-inner"><button onclick="window.adjSetVal(${exIdx}, ${setIdx}, 'reps', -1)" class="w-5 h-5 text-slate-400 font-bold hover:text-white select-none">−</button><input type="number" oninput="window.changeSetField(${exIdx}, ${setIdx}, 'reps', event.target.value)" class="w-6 bg-transparent text-center font-bold text-white outline-none" value="${set.reps}"><button onclick="window.adjSetVal(${exIdx}, ${setIdx}, 'reps', 1)" class="w-5 h-5 text-slate-400 font-bold hover:text-white select-none">自由</button></div>
                 <input type="checkbox" ${set.done?'checked':''} onchange="window.toggleSetComplete(${exIdx}, ${setIdx}, event.target.checked)" class="w-4 h-4 accent-amber-500 cursor-pointer ml-1"><button onclick="window.deleteSet(${exIdx}, ${setIdx})" class="text-slate-500 hover:text-rose-400 font-black px-1">✕</button>
             </div>`;
         });
 
-        const card = document.createElement('div'); card.className = "bg-slate-900/80 border border-slate-800/80 rounded-xl p-3 space-y-2";
+        // [복원] 역대 전수 검사 및 지능형 테두리 레이아웃 표출
+        let historyMax1RM = 0; let historyMaxVolume = 0;
+        Object.entries(state.workouts).forEach(([dateStr, dayData]) => {
+            if (dateStr === state.selectedDateStr) return; if (!dayData.exercises) return;
+            dayData.exercises.forEach(historicalEx => {
+                if (historicalEx.name !== ex.name) return; let dayExVolume = 0;
+                if (historicalEx.sets) { historicalEx.sets.forEach(s => { if (s.done) { const est1RM = s.weight * (1 + (s.reps / 30)); if (est1RM > historyMax1RM) historyMax1RM = est1RM; dayExVolume += s.weight * s.reps; } }); }
+                if (dayExVolume > historyMaxVolume) historyMaxVolume = dayExVolume;
+            });
+        });
+
+        const isPR1RM = (historyMax1RM > 0 && max1RM > historyMax1RM); const isPRVolume = (historyMaxVolume > 0 && exVolume > historyMaxVolume); const prKey = `${state.selectedDateStr}_${ex.name}`;
+        if (isPR1RM && (!sessionPRTracker.max1RM[prKey] || max1RM > sessionPRTracker.max1RM[prKey])) { sessionPRTracker.max1RM[prKey] = max1RM; if (window.isUserInteracting) { showToast(`🏆 최고 기록 경신! [${ex.name}] 1RM 돌파: ${max1RM.toFixed(1)}kg`); } }
+        if (isPRVolume && (!sessionPRTracker.maxVolume[prKey] || exVolume > sessionPRTracker.maxVolume[prKey])) { sessionPRTracker.maxVolume[prKey] = exVolume; if (window.isUserInteracting) { showToast(`🔥 최고 볼륨 경신! [${ex.name}] 볼륨 돌파: ${exVolume.toLocaleString()}kg`); } }
+
+        const card = document.createElement('div');
+        if (isPR1RM || isPRVolume) card.className = "bg-gradient-to-b from-[#221706] to-[#0F172A] border-2 border-amber-500 rounded-xl p-3 space-y-2 shadow-[0_4px_20px_rgba(245,158,11,0.2)]";
+        else card.className = "bg-slate-900/80 border border-slate-800/80 rounded-xl p-3 space-y-2";
+        const prBadge = (isPR1RM || isPRVolume) ? `<span class="px-1.5 py-0.5 text-[8px] font-black uppercase bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 rounded">🏆 PR</span>` : '';
+
         card.innerHTML = `
             <div class="flex justify-between items-start border-b border-slate-800/60 pb-1.5">
                 <div class="flex items-center gap-1.5"><div class="workout-drag-handle text-slate-500 hover:text-white cursor-move text-sm font-bold px-1 select-none">☰</div>
-                    <div><div class="flex flex-wrap gap-1 mb-0.5"><span class="px-1.5 py-0.5 text-[8px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded">${ex.part}</span></div>
-                    <div class="relative group cursor-help w-[130px] sm:w-[200px]" title="${ex.name}"><h3 class="text-xs font-black text-white truncate">${ex.name}</h3></div></div>
+                    <div><div class="flex flex-wrap gap-1 mb-0.5"><span class="px-1.5 py-0.5 text-[8px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded">${ex.part}</span>${prBadge}</div>
+                    <div class="relative group cursor-help w-[130px] sm:w-[200px]" title="${ex.name}">
+                        <h3 class="text-xs font-black text-white truncate">${ex.name}</h3>
+                        <div class="absolute hidden group-hover:block group-active:block z-50 bg-slate-950 text-slate-200 text-[11px] font-bold p-2 rounded-xl border border-slate-700 shadow-2xl min-w-max -top-10 left-0 pointer-events-none whitespace-normal break-all">${ex.name}</div>
+                    </div></div>
                 </div>
                 <div class="flex flex-col items-end gap-1"><span onclick="window.openRestTimerModal(${exIdx})" class="text-[9px] font-bold bg-slate-800 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded cursor-pointer">⏱️ ${currentRestTime}s</span><button onclick="window.deleteExercise(${exIdx})" class="text-[9px] text-slate-500 hover:text-rose-400">삭제</button></div>
             </div>
@@ -314,13 +324,42 @@ function renderWorkoutList() {
     }
 }
 
+// 오디오 합성 알림엔진 연산 패치
+function playAudioTone(type) {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)(); const now = ctx.currentTime;
+        if (type === '2') { 
+            const notes = [659.25, 880, 1046.50]; notes.forEach((freq, i) => { const osc = ctx.createOscillator(); const g = ctx.createGain(); osc.connect(g); g.connect(ctx.destination); osc.type = 'sine'; osc.frequency.value = freq; g.gain.setValueAtTime(0, now + i*0.15); g.gain.linearRampToValueAtTime(0.4, now + i*0.15 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, now + i*0.15 + 0.15); osc.start(now + i*0.15); osc.stop(now + i*0.15 + 0.15); });
+        } else { 
+            const osc = ctx.createOscillator(); const g = ctx.createGain(); osc.connect(g); g.connect(ctx.destination); osc.type = 'sine'; osc.frequency.value = 880; g.gain.setValueAtTime(0.3, now); osc.start(now); osc.stop(now + 0.3);
+        }
+    } catch(e) {}
+}
+
+function startTimerLogic(seconds, soundType) {
+    if (restTimerInterval) clearInterval(restTimerInterval); if (alarmAudioInterval) clearInterval(alarmAudioInterval);
+    currentTimerSeconds = seconds; currentAlarmSound = soundType || '1';
+    const bar = document.getElementById('timer-floating-bar'); const display = document.getElementById('timer-countdown-display');
+    document.getElementById('timer-controls-default').classList.remove('hidden'); document.getElementById('timer-controls-extend').classList.add('hidden');
+    bar.className = "fixed bottom-20 left-0 w-full z-[70] transform translate-y-0 opacity-100 transition-all duration-500 pointer-events-auto shadow-[0_-10px_40px_rgba(245,158,11,0.2)]";
+    const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; display.textContent = formatTime(currentTimerSeconds);
+    restTimerInterval = setInterval(() => { currentTimerSeconds--; if (currentTimerSeconds <= 0) { clearInterval(restTimerInterval); display.textContent = "00:00"; triggerAlarmRing(currentAlarmSound); } else { display.textContent = formatTime(currentTimerSeconds); } }, 1000);
+}
+
+function triggerAlarmRing(soundType) {
+    document.getElementById('timer-controls-default').classList.add('hidden'); document.getElementById('timer-controls-extend').classList.remove('hidden'); document.getElementById('timer-controls-extend').classList.add('flex'); document.getElementById('timer-pulse-dot').classList.remove('bg-rose-500'); document.getElementById('timer-pulse-dot').classList.add('bg-amber-500');
+    playAudioTone(soundType); let userInterval = state.userInfo?.alarmInterval || 1000; alarmAudioInterval = setInterval(() => { playAudioTone(soundType); }, userInterval);
+}
+
+window.stopRestTimer = () => { if (restTimerInterval) clearInterval(restTimerInterval); if (alarmAudioInterval) clearInterval(alarmAudioInterval); document.getElementById('timer-floating-bar').className = "fixed bottom-20 left-0 w-full z-[70] transform translate-y-full opacity-0 transition-all duration-500 pointer-events-none"; };
+window.extendRestTimer = (sec) => { if (alarmAudioInterval) clearInterval(alarmAudioInterval); document.getElementById('timer-controls-default').classList.remove('hidden'); document.getElementById('timer-controls-extend').classList.add('hidden'); document.getElementById('timer-controls-extend').classList.remove('flex'); document.getElementById('timer-pulse-dot').classList.add('bg-rose-500'); document.getElementById('timer-pulse-dot').classList.remove('bg-amber-500'); startTimerLogic(currentTimerSeconds + sec, currentAlarmSound); };
+
 window.addSet = (exIdx) => { const data = getWorkoutData(); const ex = data.exercises[exIdx]; let weight = 40, reps = 10; if (ex.sets.length > 0) { const lastSet = ex.sets[ex.sets.length - 1]; weight = lastSet.weight; reps = lastSet.reps; } ex.sets.push({ type: '일반', weight: weight, reps: reps, memo: '', done: false }); triggerSave(); renderWorkoutList(); };
 window.deleteSet = (exIdx, setIdx) => { const data = getWorkoutData(); const ex = data.exercises[exIdx]; undoBuffer = { type: 'set', exIdx: exIdx, setIdx: setIdx, data: JSON.parse(JSON.stringify(ex.sets[setIdx])) }; ex.sets.splice(setIdx, 1); triggerSave(); renderWorkoutList(); document.getElementById('btn-undo').classList.remove('hidden'); showToast("기록 삭제됨."); };
 window.adjSetVal = (exIdx, setIdx, field, delta) => { const data = getWorkoutData(); const set = data.exercises[exIdx].sets[setIdx]; let val = (parseFloat(set[field]) || 0) + delta; if (val < 0) val = 0; set[field] = val; triggerSave(); renderWorkoutList(); };
 window.changeSetField = (exIdx, setIdx, field, val) => { const data = getWorkoutData(); const set = data.exercises[exIdx].sets[setIdx]; if (field === 'weight' || field === 'reps') set[field] = parseFloat(val) || 0; else set[field] = val; triggerSave(); };
 window.toggleSetComplete = (exIdx, setIdx, isChecked) => { const data = getWorkoutData(); data.exercises[exIdx].sets[setIdx].done = isChecked; triggerSave(); renderWorkoutList(); if (isChecked) { const customRestTime = data.exercises[exIdx].restTime || state.userInfo?.defaultRestTime || 90; const customSound = data.exercises[exIdx].alarmSound || state.userInfo?.defaultAlarmSound || '1'; startTimerLogic(customRestTime, customSound); } };
 window.deleteExercise = (exIdx) => { if(confirm("종목을 삭제할까요?")) { const data = getWorkoutData(); data.exercises.splice(exIdx, 1); triggerSave(); renderWorkoutList(); } };
-document.getElementById('btn-undo').onclick = () => { if (undoBuffer && undoBuffer.type === 'set') { const data = getWorkoutData(); data.exercises[undoBuffer.exIdx].sets.splice(undoBuffer.setIdx, 0, undoBuffer.data); undoBuffer = null; triggerSave(); renderWorkoutList(); document.getElementById('btn-undo').classList.add('hidden'); showToast("원상복구 되었습니다."); } };
 
 window.runPlateCalculate = () => {
     const totalWeight = parseFloat(document.getElementById('plate-calc-target').value) || 0; const resultBox = document.getElementById('plate-calc-result'); if (totalWeight <= BAR_WEIGHT) { resultBox.innerHTML = `<span class="text-rose-400">표준 바 중량(${BAR_WEIGHT}kg) 초과 요망</span>`; return; }
@@ -329,7 +368,7 @@ window.runPlateCalculate = () => {
 };
 
 // ==========================================
-// 📚 일지 종목 사전 모달 (계층형 필터)
+// 📚 일지 종목 사전 모달 (계층형 필터 파사드)
 // ==========================================
 function getHangulChosung(str) { const cho = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"]; let result = ""; for (let i = 0; i < str.length; i++) { const code = str.charCodeAt(i) - 44032; if (code >= 0 && code <= 11172) result += cho[Math.floor(code / 588)]; else result += str.charAt(i); } return result; }
 window.openLibraryModal = () => { document.getElementById('library-modal').classList.remove('hidden'); document.getElementById('library-modal').classList.add('flex'); window.runLibrarySearchFilter(); };
@@ -340,7 +379,7 @@ window.runLibrarySearchFilter = () => {
     const rawInput = document.getElementById('library-search-input').value.trim().toLowerCase(); const input = rawInput.replace(/\s+/g, ''); const grid = document.getElementById('library-master-card-grid'); grid.innerHTML = ''; const filterBar = document.getElementById('library-filter-part-bar'); const typeBar = document.getElementById('library-filter-type-bar');
     if (filterBar.children.length === 0) {
         const parts = ['전체', ...Object.keys(WORKOUT_DB)];
-        parts.forEach(p => { const pill = document.createElement('button'); pill.innerText = p; pill.className = `px-2.5 py-1 text-[10px] font-black rounded-full transition-colors flex-shrink-0 min-w-max ${p === libraryActivePart ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`; pill.onclick = () => { libraryActivePart = p; libraryActiveType = '전체'; window.runLibrarySearchFilter(); }; filterBar.appendChild(pill); });
+        parts.forEach(p => { const pill = document.createElement('button'); pill.innerText = p; pill.className = `px-2.5 py-1 text-[10px] font-black rounded-full whitespace-nowrap transition-colors flex-shrink-0 min-w-max ${p === libraryActivePart ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`; pill.onclick = () => { libraryActivePart = p; libraryActiveType = '전체'; window.runLibrarySearchFilter(); }; filterBar.appendChild(pill); });
     } else { Array.from(filterBar.children).forEach(btn => { btn.className = `px-2.5 py-1 text-[10px] font-black rounded-full flex-shrink-0 min-w-max ${btn.innerText === libraryActivePart ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`; }); }
 
     if (typeBar) {
@@ -356,17 +395,17 @@ window.runLibrarySearchFilter = () => {
 
     const favoriteExercises = matchedExercises.filter(ex => ex.freq > 0).sort((a, b) => b.freq - a.freq).slice(0, 3);
     if (favoriteExercises.length > 0) {
-        const favHeader = document.createElement('div'); favHeader.className = "col-span-1 sm:col-span-2 text-[10px] font-black text-amber-400 uppercase tracking-wider mt-1 select-none"; favHeader.innerHTML = `⭐ 추천`; grid.appendChild(favHeader);
+        const favHeader = document.createElement('div'); favHeader.className = "col-span-1 sm:col-span-2 text-[10px] font-black text-amber-400 uppercase tracking-wider mt-1 select-none"; favHeader.innerHTML = `⭐ 다빈도 선호 추천 종목`; grid.appendChild(favHeader);
         favoriteExercises.forEach(ex => {
             const card = document.createElement('div'); card.className = "p-2.5 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30 rounded-xl flex justify-between items-center shadow-md self-start";
-            card.innerHTML = `<div class="truncate mr-2 w-full"><span class="text-[8px] font-black uppercase bg-amber-500/20 text-amber-400 px-1 py-0.5 rounded mr-1">${ex.freq}회</span><span class="text-[9px] font-bold text-slate-500">${ex.part}</span><h4 class="text-xs font-black text-amber-400 truncate mt-0.5">${ex.name}</h4></div><button onclick="window.injectLibraryToToday('${ex.part}', '${ex.type}', '${ex.name}')" class="px-2.5 py-1.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg shrink-0">추가</button>`; grid.appendChild(card);
+            card.innerHTML = `<div class="truncate mr-2 w-full relative group cursor-help" title="${ex.name}"><span class="text-[8px] font-black uppercase bg-amber-500/20 text-amber-400 px-1 py-0.5 rounded mr-1">${ex.freq}회</span><span class="text-[9px] font-bold text-slate-500">${ex.part}</span><h4 class="text-xs font-black text-amber-400 truncate mt-0.5">${ex.name}</h4><div class="absolute hidden group-hover:block z-50 bg-slate-950 text-slate-200 text-[10px] font-bold p-2 rounded border border-slate-700 shadow-xl -top-8 left-0">${ex.name}</div></div><button onclick="window.injectLibraryToToday('${ex.part}', '${ex.type}', '${ex.name}')" class="px-2.5 py-1.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg shrink-0">추가</button>`; grid.appendChild(card);
         });
         const divider = document.createElement('div'); divider.className = "col-span-1 sm:col-span-2 border-t border-slate-800/80 my-1"; grid.appendChild(divider);
     }
     if (matchedExercises.length === 0) { grid.innerHTML = `<p class="text-[10px] text-slate-500 py-4 text-center col-span-1 sm:col-span-2">결과 없음</p>`; return; }
     matchedExercises.forEach(ex => {
         const card = document.createElement('div'); card.className = "p-2.5 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center self-start";
-        card.innerHTML = `<div class="truncate mr-2 w-full"><span class="text-[9px] font-bold text-slate-500 truncate">${ex.part}</span><h4 class="text-xs font-black text-slate-200 truncate mt-0.5">${ex.name}</h4></div><button onclick="window.injectLibraryToToday('${ex.part}', '${ex.type}', '${ex.name}')" class="px-2.5 py-1.5 bg-slate-800 text-[10px] font-bold rounded-lg shrink-0">추가</button>`; grid.appendChild(card);
+        card.innerHTML = `<div class="truncate mr-2 w-full relative group cursor-help" title="${ex.name}"><span class="text-[9px] font-bold text-slate-500 truncate">${ex.part}</span><h4 class="text-xs font-black text-slate-200 truncate mt-0.5">${ex.name}</h4><div class="absolute hidden group-hover:block z-50 bg-slate-950 text-slate-200 text-[10px] font-bold p-2 rounded border border-slate-700 shadow-xl -top-8 left-0">${ex.name}</div></div><button onclick="window.injectLibraryToToday('${ex.part}', '${ex.type}', '${ex.name}')" class="px-2.5 py-1.5 bg-slate-800 text-[10px] font-bold rounded-lg shrink-0">추가</button>`; grid.appendChild(card);
     });
 };
 window.injectLibraryToToday = (part, type, name) => {
@@ -387,42 +426,42 @@ window.adjRestTimerSetting = (delta) => { const input = document.getElementById(
 window.saveRestTimerModal = () => { const exIdx = parseInt(document.getElementById('rest-timer-ex-idx').value); const sec = parseInt(document.getElementById('rest-timer-sec-input').value) || 90; const data = getWorkoutData(); data.exercises[exIdx].restTime = sec; triggerSave(); window.closeRestTimerModal(); renderWorkoutList(); showToast("타이머 반영."); };
 
 // ==========================================
-// 📊 전역 통계 차트 렌더링 모듈
+// 📊 다차원 차트분석 알고리즘 연동 모듈
 // ==========================================
 function renderWorkoutAnalysisCharts() {
-    const cvsBalance = document.getElementById('chart-workout-analysis'); const cvsVolume = document.getElementById('chart-volume-trend'); const cvsWeight = document.getElementById('chart-weight-trend'); if(!cvsBalance) return;
+    const cvsBalance = document.getElementById('chart-workout-analysis'); const cvsVolume = document.getElementById('chart-volume-trend'); if(!cvsBalance) return;
     const partsCount = { '가슴': 0, '등': 0, '어깨': 0, '팔': 0, '하체': 0, '복근': 0, '기타': 0 }; let best1RMVal = 0; let best1RMEx = '-'; const exFreq = {};
+
     Object.values(state.workouts).forEach(dateObj => { if (dateObj.exercises) { dateObj.exercises.forEach(ex => { let pKey = '기타'; if (ex.part.includes('가슴')) pKey = '가슴'; else if (ex.part.includes('등')) pKey = '등'; else if (ex.part.includes('어깨')) pKey = '어깨'; else if (ex.part.includes('팔')) pKey = '팔'; else if (ex.part.includes('하체')) pKey = '하체'; else if (ex.part.includes('복근')) pKey = '복근'; partsCount[pKey] += ex.sets ? ex.sets.length : 0; exFreq[ex.name] = (exFreq[ex.name] || 0) + 1; ex.sets.forEach(s => { if(s.done) { const est1RM = s.weight * (1 + (s.reps / 30)); if(est1RM > best1RMVal) { best1RMVal = est1RM; best1RMEx = ex.name; } } }); });} });
     let maxFreq = 0; let favEx = '-'; Object.entries(exFreq).forEach(([name, count]) => { if(count > maxFreq) { maxFreq = count; favEx = name; } });
     document.getElementById('stat-favorite-ex').innerText = favEx !== '-' ? favEx : '기록 부족'; document.getElementById('stat-best-1rm').innerText = best1RMEx !== '-' ? `${best1RMEx} (${best1RMVal.toFixed(1)}kg)` : '기록 부족';
-    const activeDates = Object.keys(state.workouts).filter(d => (state.workouts[d].exercises && state.workouts[d].exercises.length > 0) || state.workouts[d].weight > 0).sort(); const last7Days = activeDates.slice(-7); const labels = last7Days.map(d => d.slice(5).replace('-','/')); const volData = []; const weightData = [];
-    last7Days.forEach(d => { const obj = state.workouts[d]; let dayVol = 0; if(obj.exercises) obj.exercises.forEach(e => e.sets.forEach(s => { if(s.done) dayVol += s.weight * s.reps; })); volData.push(dayVol); weightData.push(obj.weight || null); });
+    const activeDates = Object.keys(state.workouts).filter(d => (state.workouts[d].exercises && state.workouts[d].exercises.length > 0) || state.workouts[d].weight > 0).sort(); const last7Days = activeDates.slice(-7); const labels = last7Days.map(d => d.slice(5).replace('-','/')); const volData = [];
+    last7Days.forEach(d => { const obj = state.workouts[d]; let dayVol = 0; if(obj.exercises) obj.exercises.forEach(e => e.sets.forEach(s => { if(s.done) dayVol += s.weight * s.reps; })); volData.push(dayVol); });
 
     setTimeout(() => {
         if(chartBalance) chartBalance.destroy(); chartBalance = new Chart(cvsBalance.getContext('2d'), { type: 'radar', data: { labels: Object.keys(partsCount), datasets: [{ data: Object.values(partsCount), backgroundColor: 'rgba(245,158,11,0.15)', borderColor: '#F59E0B', borderWidth: 2, pointBackgroundColor: '#F59E0B' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { r: { grid: { color: 'rgba(255,255,255,0.05)' }, angleLines: { color: 'rgba(255,255,255,0.05)' }, pointLabels: { color: '#94A3B8', font: {size: 10} }, ticks: { display: false } } } });
         if(chartVolume) chartVolume.destroy(); chartVolume = new Chart(cvsVolume.getContext('2d'), { type: 'bar', data: { labels: labels, datasets: [{ label: '총 볼륨(kg)', data: volData, backgroundColor: '#F59E0B', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#94A3B8', font: {size: 9} } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94A3B8', font: {size: 9} } } } } });
-        if(chartWeight) chartWeight.destroy(); chartWeight = new Chart(cvsWeight.getContext('2d'), { type: 'line', data: { labels: labels, datasets: [{ label: '체중(kg)', data: weightData, borderColor: '#0EA5E9', backgroundColor: 'rgba(14,165,233,0.1)', fill: true, tension: 0.3, pointBackgroundColor: '#0EA5E9', spanGaps: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#94A3B8', font: {size: 9} } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94A3B8', font: {size: 9} } } } } });
     }, 50);
 }
 
-// 스크롤 이벤트: 식단 콤팩트 스티키 헤더 전환
+// 스크롤 제어 고정 인터페이스 처리 바인딩
 window.addEventListener('scroll', function() {
-    const stickyBar = document.getElementById('sticky-macro-bar');
-    if(!stickyBar || document.getElementById('view-diet').classList.contains('hidden')) return;
-    if (window.scrollY > 300) { stickyBar.classList.add('compact-sticky'); } else { stickyBar.classList.remove('compact-sticky'); }
+    const stickyBar = document.getElementById('sticky-macro-bar'); if(!stickyBar || document.getElementById('view-diet').classList.contains('hidden')) return;
+    if (window.scrollY > 260) { stickyBar.classList.add('compact-sticky'); } else { stickyBar.classList.remove('compact-sticky'); }
 });
 
-// 백업 기능 통합 바인딩
-window.exportData = () => exportDataJSON(showToast); window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("데이터 동기화/복원 성공."); }, () => showToast("비정상 백업 파일 형식입니다."));
-window.exportWorkoutToCSV = () => { let csv = "\uFEFF일자,부위,종목명,세트,중량,반복,완료\n"; Object.entries(state.workouts).forEach(([d,o]) => { if(o.exercises) o.exercises.forEach(e => e.sets.forEach((s,i) => { csv += `${d},${e.part},${e.name},${i+1},${s.weight},${s.reps},${s.done?'Y':'N'}\n`; })); }); const l = document.createElement("a"); l.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); l.setAttribute("download","Workout_Log.csv"); document.body.appendChild(l); l.click(); document.body.removeChild(l); };
-window.triggerClearAllWorkoutData = () => { if(confirm("모든 일지와 식단을 영구 삭제합니까?")) { state.workouts={}; state.phases=[]; triggerSave(); location.reload(); }};
+// 데이터 마운트 허브 확장 연동
+window.exportData = () => exportDataJSON(showToast); window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("원격 동기화 복원 완료"); }, () => showToast("정상적인 json 구성 요소가 아닙니다."));
+window.exportWorkoutToCSV = () => { let csv = "\uFEFF일자,부위,종목명,세트,중량,반복,완료\n"; Object.entries(state.workouts).forEach(([d,o]) => { if(o.exercises) o.exercises.forEach(e => e.sets.forEach((s,i) => { csv += `${d},${e.part},${e.name},${i+1},${s.weight},${s.reps},${s.done?'Y':'N'}\n`; })); }); const l = document.createElement("a"); l.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); l.setAttribute("download","Workout_Log_Report.csv"); document.body.appendChild(l); l.click(); document.body.removeChild(l); };
+window.triggerClearAllWorkoutData = () => { if(confirm("초기화 시 로컬 및 서버의 모든 데이터가 소멸합니다. 진행할까요?")) { state.workouts={}; state.phases=[]; triggerSave(); location.reload(); }};
 
 // ==========================================
-// 🚀 앱 부팅 통합 코어
+// 🚀 오케스트레이션 엔진 부팅
 // ==========================================
 initializeFirebase((success) => {
     requestPersistentStorage();
     const statusEl = document.getElementById('cloud-status');
-    if (statusEl) { if (success) statusEl.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> 정상 연동'; else statusEl.innerHTML = '<span class="w-2 h-2 bg-sky-500 rounded-full"></span> 로컬 모드'; }
+    if (statusEl) { if (success) statusEl.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> 동기화 활성'; else statusEl.innerHTML = '<span class="w-2 h-2 bg-sky-500 rounded-full"></span> 로컬 모드'; }
     updateAccountStatusUI(); finishInit();
+    setTimeout(() => { window.isUserInteracting = true; }, 1000);
 });
