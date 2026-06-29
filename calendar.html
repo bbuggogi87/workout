@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PREP MASTER PRO - Workout Tracker</title>
+    <title>PREP MASTER PRO - Workout Record Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -34,7 +34,7 @@
 <div id="toast" class="fixed bottom-32 right-5 z-[130] transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-none shadow-2xl">
     <div class="glass-panel px-5 py-4 rounded-2xl flex items-center gap-3 border-amber-500/50 bg-[#0F172A]">
         <span class="w-3 h-3 bg-amber-500 rounded-full animate-ping flex-shrink-0"></span>
-        <p class="text-sm font-bold text-white break-keep" id="toast-text">보호 작동 확인</p>
+        <p class="text-sm font-bold text-white break-keep" id="toast-text">시스템 안전 보호 확인</p>
         <button id="btn-undo" class="hidden text-xs bg-amber-500 text-slate-950 font-black px-2 py-1 rounded ml-2 hover:bg-amber-400">되돌리기</button>
     </div>
 </div>
@@ -72,7 +72,7 @@
             </div>
             <h1 class="text-4xl sm:text-5xl font-black text-white">TRAINING <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-rose-400">TRACKER</span></h1>
             <div class="flex flex-wrap gap-2 mt-4">
-                <a href="index.html" class="px-4 py-2 text-xs font-bold bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 rounded-xl border border-sky-700/40 transition-colors">🥑 고정밀 식단 플래너 이동</a>
+                <a href="index.html" class="px-4 py-2 text-xs font-bold bg-sky-900/40 hover:bg-sky-800/60 text-sky-300 rounded-xl border border-sky-700/40 transition-colors">🥑 고정밀 식단 모듈 이동</a>
             </div>
         </div>
         
@@ -118,7 +118,7 @@
             <button onclick="window.switchCalendarTab('tab-record')" class="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 text-sm font-black px-6 py-3 rounded-xl transition-all">훈련지 전개</button>
         </div>
         <div class="glass-panel p-5 rounded-2xl border border-slate-800">
-            <h4 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">★ 자주 기입하는 종목 퀵 마운트 배지</h4>
+            <h4 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">★ 자주 기입하는 종목 빠른 마운트</h4>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2" id="home-quick-widget-box"></div>
         </div>
     </section>
@@ -184,7 +184,7 @@
 
     <section id="pane-tab-routine" class="calendar-pane space-y-4 hidden animate-fade-in">
         <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-            <h2 class="text-xl font-black text-white">📋 분할 루틴 프리셋 프로그램</h2>
+            <h2 class="text-xl font-black text-white">📋 분할 루틴 및 추천 세트 프로그램</h2>
             <button onclick="window.openTemplateManager()" class="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold border border-slate-700">백업 보존실</button>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="routine-preset-grid-box"></div>
@@ -195,7 +195,7 @@
             <h2 class="text-xl font-black text-amber-500 mb-6 flex items-center gap-2">⏰ 수동 휴식 알람 신디사이징</h2>
             <div class="space-y-5">
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 mb-2">알람 주파수 형태</label>
+                    <label class="block text-xs font-bold text-slate-400 mb-2">알람 주파수 형태 (Sound Motif)</label>
                     <select id="alarm-sound-select" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white font-bold outline-none">
                         <option value="1">1. 기본 숏 비프 (Clear Alert)</option>
                         <option value="2">2. 마림바 아르페지오 (Radar Marimba)</option>
@@ -205,7 +205,7 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 mb-2">알람 비프 속도 주기</label>
+                    <label class="block text-xs font-bold text-slate-400 mb-2">알람 비프 속도 주기 (Repeat Interval)</label>
                     <select id="alarm-interval-select" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white font-bold outline-none">
                         <option value="500">초고속 (0.5초 간격)</option><option value="800">고속 (0.8초 간격)</option>
                         <option value="1000" selected>표준 (1.0초 간격)</option><option value="1500">저속 (1.5초 간격)</option>
@@ -261,7 +261,7 @@
 
     <section id="pane-tab-settings" class="calendar-pane space-y-4 hidden animate-fade-in">
         <div class="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
-            <h3 class="text-sm font-black text-amber-500 uppercase tracking-wider border-b border-slate-800 pb-2">⏱️ 전역 시스템 설정</h3>
+            <h3 class="text-sm font-black text-amber-500 uppercase tracking-wider border-b border-slate-800 pb-2">⏱️ 시스템 기본값 환경 세팅</h3>
             <div class="space-y-4">
                 <div class="flex justify-between items-center">
                     <label class="text-xs font-bold text-slate-400">기본 휴식 시간 (초)</label>
@@ -303,13 +303,16 @@
             <h3 class="text-base font-black text-white">📚 초성 지원 계층형 종목 사전</h3>
             <button onclick="window.closeLibraryModal()" class="text-slate-400 hover:text-white font-black text-sm px-2 py-1">✕</button>
         </div>
+        
         <div class="bg-slate-900 border border-sky-500/40 rounded-xl p-3 flex items-center gap-2 mb-2 shrink-0">
             <span class="text-slate-500 pl-1">🔍</span>
             <input type="text" id="library-search-input" oninput="window.runLibrarySearchFilter()" placeholder="초성 및 공백 무시 통합검색" class="w-full bg-transparent text-sm text-white outline-none font-bold">
         </div>
+
         <div id="library-fullname-viewer" class="text-xs font-bold text-amber-400 bg-slate-950/90 px-3 py-2.5 rounded-xl border border-slate-800 hidden text-center animate-fade-in shrink-0 mb-2"></div>
         <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-1 shrink-0" id="library-filter-part-bar"></div>
         <div class="flex gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-2 border-b border-slate-800/80 shrink-0 hidden" id="library-filter-type-bar"></div>
+        
         <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="library-master-card-grid"></div>
             <div id="library-frequent-box" class="hidden border-t border-slate-800/80 pt-3">
@@ -321,24 +324,9 @@
     </div>
 </div>
 
-<div id="routine-editor-popup-modal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/90 backdrop-blur-md px-4">
-    <div class="glass-panel p-5 sm:p-6 rounded-3xl w-full max-w-md max-h-[85vh] flex flex-col border border-amber-500/40 shadow-2xl animate-fade-in">
-        <div class="flex justify-between items-center mb-3 shrink-0">
-            <h3 id="routine-editor-popup-title" class="text-base font-black text-amber-500">✏️ 프로그램 독립 편집</h3>
-            <button onclick="window.closeTemplatePopupEditor()" class="text-slate-400 hover:text-white font-black text-sm px-2 py-1">✕</button>
-        </div>
-        <p class="text-[11px] text-slate-400 mb-3 shrink-0">여기서의 편집은 오늘 일지 기록을 오염시키지 않고 프리셋 구조만 격리 수정 보존합니다.</p>
-        <div id="routine-editor-list-container" class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 mb-4 bg-slate-950/40 p-2 rounded-xl border border-slate-800/60"></div>
-        <div class="flex gap-2 shrink-0 border-t border-slate-800/80 pt-4">
-            <button onclick="window.closeTemplatePopupEditor()" class="flex-1 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-white text-xs font-bold rounded-xl transition-colors">편집취소</button>
-            <button onclick="window.saveTemplatePopupEditorData()" class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl transition-colors shadow-lg">💾 편집완료 덮어쓰기 저장</button>
-        </div>
-    </div>
-</div>
-
 <div id="rest-timer-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/85 backdrop-blur-sm px-4">
     <div class="glass-panel p-6 rounded-3xl w-full max-w-sm animate-fade-in border border-amber-500/30 shadow-2xl">
-        <h3 class="text-base font-black text-white mb-4">⏱/ 종목 전용 휴식 알람 세팅</h3>
+        <h3 class="text-base font-black text-white mb-4">⏱️ 종목 전용 휴식 알람 세팅</h3>
         <input type="hidden" id="rest-timer-ex-idx">
         <label class="block text-xs font-bold text-slate-400 mb-2">휴식 시간 (초)</label>
         <div class="flex items-center justify-center gap-3 bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">
@@ -394,6 +382,20 @@
     </div>
 </div>
 
-<script type="module" src="calendar.js"></script>
+<div id="routine-editor-popup-modal" class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/90 backdrop-blur-md px-4">
+    <div class="glass-panel p-5 sm:p-6 rounded-3xl w-full max-w-md max-h-[85vh] flex flex-col border border-amber-500/40 shadow-2xl animate-fade-in">
+        <div class="flex justify-between items-center mb-3 shrink-0">
+            <h3 id="routine-editor-popup-title" class="text-base font-black text-amber-500">✏️ 프로그램 독립 편집</h3>
+            <button onclick="window.closeTemplatePopupEditor()" class="text-slate-400 hover:text-white font-black text-sm px-2 py-1">✕</button>
+        </div>
+        <p class="text-[11px] text-slate-400 mb-3 shrink-0">여기서의 편집은 오늘 일지 기록을 오염시키지 않고 프리셋 구조만 격리 수정 보존합니다.</p>
+        <div id="routine-editor-list-container" class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 mb-4 bg-slate-950/40 p-2 rounded-xl border border-slate-800/60"></div>
+        <div class="flex gap-2 shrink-0 border-t border-slate-800/80 pt-4">
+            <button onclick="window.closeTemplatePopupEditor()" class="flex-1 py-3 bg-slate-900 border border-slate-700 text-slate-400 text-xs font-bold rounded-xl">편집취소</button>
+            <button onclick="window.saveTemplatePopupEditorData()" class="flex-1 py-3 bg-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-lg">💾 편집완료 저장</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
