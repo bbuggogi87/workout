@@ -1,7 +1,7 @@
 /**
  * 파일명: calendar.js
  * 역할: 훈련 일지 기록 관리, 웹 오디오 알람 신디사이징 및 독립형 팝업 에디터 총괄 통제 컨트롤러
- * 변경사항: 운동 및 세트 상/하 이동 버튼 적용, 달력 날짜 패딩 처리 오류 전수 치환 완료, 팝업 사전연동 추가
+ * 변경사항: 구문 오류 청소, 한글 초성 분리 함수 주입, 최초 접속 라이프사이클 동 동기화 부팅 엔진 구현 완료
  */
 
 import { state } from './store.js';
@@ -80,6 +80,7 @@ window.moveSetOrder = moveSetOrder;
 window.moveSetOrderInEditor = moveSetOrderInEditor;
 window.triggerLibraryAddFromEditor = triggerLibraryAddFromEditor;
 window.moveExerciseOrder = moveExerciseOrder; 
+window.initCalendarModule = initCalendarModule;
 
 export function showToast(msg) {
     const t = document.getElementById('toast');
@@ -309,8 +310,7 @@ export function renderCalendarGrid() {
 
     for (let day = 1; day <= lastDate; day++) {
         const dayBtn = document.createElement('button');
-        // [무결성 확립] 기존 문자열 결함 유발 오타 '0 Month' 파트를 지우고 '0' 상수로 정밀 스크리닝 교정
-        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}--${String(day).padStart(2, '0')}`.replace('--', '-');
         dayBtn.textContent = day;
         dayBtn.className = "p-3 rounded-xl font-bold text-sm transition-all flex flex-col items-center justify-center min-h-[52px] relative border border-transparent hover:border-slate-700 select-none";
 
@@ -429,9 +429,6 @@ export function renderWorkoutList() {
     if(totalVolumeEl) totalVolumeEl.innerText = `총 훈련 볼륨: ${dailyTotalVolume.toLocaleString()} kg`;
 }
 
-/**
- * [상위 호환 보완] 운동 종목 카드 자체의 자바스크립트 배열 위치 치환 가동 함수
- */
 export function moveExerciseOrder(exIdx, direction) {
     const data = getWorkoutData();
     const targetIdx = exIdx + direction;
@@ -500,8 +497,22 @@ export function clearDailyExercises() {
 }
 
 // ==========================================
-// 📚 종목 사전 2단계 가드 절 예외처리 (목록 완벽 활성화)
+// 📚 종목 사전 2단계 가드 절 예외처리 및 초성 가동 엔진
 // ==========================================
+function getHangulChosung(str) {
+    const cho = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+    let result = "";
+    for (let i = 0; i < str.length; i++) {
+        let code = str.charCodeAt(i) - 44032;
+        if (code >= 0 && code <= 11172) {
+            result += cho[Math.floor(code / 588)];
+        } else {
+            result += str.charAt(i);
+        }
+    }
+    return result;
+}
+
 function calculateExerciseFrequencies() {
     const counts = {};
     Object.values(state.workouts).forEach(w => {
@@ -520,18 +531,12 @@ export function closeLibraryModal() { document.getElementById('library-modal').c
 export function changeLibraryPartFilter(part) { libraryActivePart = part; libraryActiveType = '전체'; runLibrarySearchFilter(); }
 export function changeLibraryTypeFilter(type) { libraryActiveType = type; runLibrarySearchFilter(); }
 
-/**
- * 문자열 파괴 현상을 미연에 방어하도록 정수형 인덱스 변수를 매핑하여 팝업 연동해주는 함수
- */
 export function showFullExerciseName(mapperIndex) {
     const meta = state.libraryTempMapper[mapperIndex]; if (!meta) return;
     const viewer = document.getElementById('library-fullname-viewer');
     viewer.innerText = `🔍 전체 운동 명칭: ${meta.name}`; viewer.classList.remove('hidden');
 }
 
-/**
- * 2단계 연쇄 계층형 가드 절 필터링 시스템 (전체 목록 정상 디스플레이 보증)
- */
 export function runLibrarySearchFilter() {
     const rawInput = document.getElementById('library-search-input').value.trim().toLowerCase();
     const input = rawInput.replace(/\s+/g, ''); 
@@ -986,14 +991,86 @@ export function saveQuickInputFABModal() {
     triggerSave(showToast); closeQuickInputFABModal(); if(document.getElementById('pane-tab-record').classList.contains('block')) renderWorkoutList(); showToast("신속 등록 완료.");
 }
 
+export function openRestTimerModal(exIdx) {
+    const data = getWorkoutData(); const ex = data.exercises[exIdx];
+    if (!ex) return;
+    document.getElementById('rest-timer-ex-idx').value = exIdx;
+    document.getElementById('rest-timer-sec-input').value = ex.restTime || state.userInfo?.defaultRestTime || 90;
+    document.getElementById('rest-timer-sound-input').value = ex.alarmSound || state.userInfo?.defaultAlarmSound || '1';
+    document.getElementById('rest-timer-modal').classList.remove('hidden');
+    document.getElementById('rest-timer-modal').classList.add('flex');
+}
+export function closeRestTimerModal() { document.getElementById('rest-timer-modal').classList.add('hidden'); document.getElementById('rest-timer-modal').classList.remove('flex'); }
+export function saveRestTimerModal() {
+    const exIdx = parseInt(document.getElementById('rest-timer-ex-idx').value);
+    const data = getWorkoutData(); const ex = data.exercises[exIdx];
+    if (ex) {
+        ex.restTime = parseInt(document.getElementById('rest-timer-sec-input').value) || 90;
+        ex.alarmSound = document.getElementById('rest-timer-sound-input').value || '1';
+        triggerSave(showToast); closeRestTimerModal(); renderWorkoutList(); showToast("종목별 알람 주기가 변경되었습니다.");
+    }
+}
+export function adjRestTimerSetting(delta) {
+    const input = document.getElementById('rest-timer-sec-input');
+    let val = (parseInt(input.value) || 0) + delta; if (val < 0) val = 0; input.value = val;
+}
+
+// ==========================================
+// 🚀 고밀도 시스템 라이프사이클 초기화 부팅 엔진
+// ==========================================
+export function initCalendarModule() {
+    const now = new Date();
+    viewYear = now.getFullYear();
+    viewMonth = now.getMonth(); 
+    
+    const day = now.getDate();
+    const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    
+    // 상태 초기 기입 라우팅
+    state.selectedDateStr = dateStr;
+    
+    // UI 스크리닝 요소 마운트
+    const labelEl = document.getElementById('label-selected-date');
+    if (labelEl) labelEl.textContent = `${String(viewMonth + 1).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+    
+    const data = getWorkoutData();
+    const weightEl = document.getElementById('input-daily-weight');
+    const bfEl = document.getElementById('input-daily-bf');
+    const smmEl = document.getElementById('input-daily-smm');
+    if (weightEl) weightEl.value = data.weight > 0 ? data.weight : '';
+    if (bfEl) bfEl.value = data.bf > 0 ? data.bf : '';
+    if (smmEl) smmEl.value = data.smm > 0 ? data.smm : '';
+    
+    // 렌더 파이프라인 집행 및 초기 탭 정렬
+    renderCalendarGrid();
+    renderWorkoutList();
+    switchCalendarTab('tab-home');
+    loadSystemSettings();
+}
+
 function initMetricsChangeEvents() {
     const updateMetricsData = () => {
         const dStr = state.selectedDateStr; if (!dStr) return;
+        if (!state.workouts[dStr]) state.workouts[dStr] = { weight: 0, bf: 0, smm: 0, exercises: [] };
         state.workouts[dStr].weight = parseFloat(document.getElementById('input-daily-weight').value) || 0;
         state.workouts[dStr].bf = parseFloat(document.getElementById('input-daily-bf').value) || 0;
         state.workouts[dStr].smm = parseFloat(document.getElementById('input-daily-smm').value) || 0;
         triggerSave(showToast); renderCalendarGrid();
     };
-    document.getElementById('input-daily-weight').oninput = updateMetricsData; document.getElementById('input-daily-bf').oninput = updateMetricsData; document.getElementById('input-daily-smm').oninput = updateMetricsData;
+    const weightEl = document.getElementById('input-daily-weight');
+    const bfEl = document.getElementById('input-daily-bf');
+    const smmEl = document.getElementById('input-daily-smm');
+    if (weightEl) weightEl.oninput = updateMetricsData; 
+    if (bfEl) bfEl.oninput = updateMetricsData; 
+    if (smmEl) smmEl.oninput = updateMetricsData;
 }
-initMetricsChangeEvents();
+
+// 오프라인 인프라 가동 확인 후 안전 부팅 집행
+initializeFirebase((success) => {
+    const statusEl = document.getElementById('cloud-status-workout');
+    if (statusEl) {
+        statusEl.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10B981]"></span> LOCAL TRAINER ACTIVE';
+    }
+    initMetricsChangeEvents();
+    initCalendarModule();
+});
