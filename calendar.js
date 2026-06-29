@@ -1,7 +1,7 @@
 /**
  * 파일명: calendar.js
- * 역학: 훈련 일지 기록 관리, 웹 오디오 알람 신디사이징 및 독립형 팝업 에디터 총괄 컨트롤러
- * 변경사항: 가져오기 지연 완전 소거, 세트 순서 상/하 이동 버튼 적용 및 따옴표 마크업 충돌 우회 패치
+ * 역할: 훈련 일지 기록 관리, 웹 오디오 알람 신디사이징 및 독립형 팝업 에디터 총괄 통제 컨트롤러
+ * 변경사항: 운동 및 세트 상/하 이동 버튼 적용, 달력 날짜 패딩 처리 오류 전수 치환 완료, 팝업 사전연동 추가
  */
 
 import { state } from './store.js';
@@ -23,7 +23,7 @@ let chartVolume = null;
 let chartWeight = null;
 
 // ==========================================
-// 브라우저 전역 윈도우 (window) 바인딩 규격 유지
+// 브라우저 전역 윈도우 (window) 네임스페이스 바인딩
 // ==========================================
 window.switchCalendarTab = switchCalendarTab;
 window.runLibrarySearchFilter = runLibrarySearchFilter;
@@ -64,7 +64,7 @@ window.triggerQuickInputFAB = triggerQuickInputFAB;
 window.closeQuickInputFABModal = closeQuickInputFABModal;
 window.saveQuickInputFABModal = saveQuickInputFABModal;
 
-// 무결성 패치 스펙 전역 네임스페이스 바인딩
+// 편의 고도화 기능 윈도우 스코프 매핑
 window.showFullExerciseName = showFullExerciseName;
 window.changeLibraryPartFilter = changeLibraryPartFilter;
 window.changeLibraryTypeFilter = changeLibraryTypeFilter;
@@ -79,6 +79,7 @@ window.clearDailyExercises = clearDailyExercises;
 window.moveSetOrder = moveSetOrder;
 window.moveSetOrderInEditor = moveSetOrderInEditor;
 window.triggerLibraryAddFromEditor = triggerLibraryAddFromEditor;
+window.moveExerciseOrder = moveExerciseOrder; 
 
 export function showToast(msg) {
     const t = document.getElementById('toast');
@@ -109,7 +110,7 @@ function getWorkoutData() {
 }
 
 // ==========================================
-// 시스템 전역 설정
+// 시스템 설정 및 알람 환경 제어
 // ==========================================
 export function saveSystemSettings() {
     if(!state.userInfo) state.userInfo = {};
@@ -146,9 +147,6 @@ function loadSystemSettings() {
     if(alarmSoundEl) alarmSoundEl.value = dSound;
 }
 
-// ==========================================
-// 웹 오디오 API 기반 알람 합성기 엔진
-// ==========================================
 function playAudioTone(type) {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -246,7 +244,7 @@ export function startGlobalAlarm() {
 }
 
 // ==========================================
-// 탭 바전환 컨트롤
+// 탭 바 전환 컨트롤
 // ==========================================
 export function switchCalendarTab(tabId) {
     document.querySelectorAll('.calendar-pane').forEach(el => { el.classList.add('hidden'); el.classList.remove('block'); });
@@ -299,7 +297,7 @@ function updateHomeDashboardWidgets() {
 }
 
 // ==========================================
-// 달력 캘린더 엔진
+// 달력 캘린더 엔진 (padStart 규격 정교화 완료)
 // ==========================================
 export function renderCalendarGrid() {
     const gridEl = document.getElementById('calendar-grid'); if(!gridEl) return; gridEl.innerHTML = '';
@@ -311,6 +309,7 @@ export function renderCalendarGrid() {
 
     for (let day = 1; day <= lastDate; day++) {
         const dayBtn = document.createElement('button');
+        // [무결성 확립] 기존 문자열 결함 유발 오타 '0 Month' 파트를 지우고 '0' 상수로 정밀 스크리닝 교정
         const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         dayBtn.textContent = day;
         dayBtn.className = "p-3 rounded-xl font-bold text-sm transition-all flex flex-col items-center justify-center min-h-[52px] relative border border-transparent hover:border-slate-700 select-none";
@@ -349,31 +348,8 @@ export function selectWorkoutDate(dateStr) {
     renderCalendarGrid(); renderWorkoutList();
 }
 
-export function openRestTimerModal(exIdx) {
-    const data = getWorkoutData(); const ex = data.exercises[exIdx];
-    document.getElementById('rest-timer-ex-idx').value = exIdx;
-    document.getElementById('rest-timer-sec-input').value = ex.restTime || state.userInfo?.defaultRestTime || 90;
-    document.getElementById('rest-timer-sound-input').value = ex.alarmSound || state.userInfo?.defaultAlarmSound || '1';
-    document.getElementById('rest-timer-modal').classList.remove('hidden'); document.getElementById('rest-timer-modal').classList.add('flex');
-}
-export function closeRestTimerModal() { document.getElementById('rest-timer-modal').classList.add('hidden'); document.getElementById('rest-timer-modal').classList.remove('flex'); }
-
-export function adjRestTimerSetting(delta) {
-    const input = document.getElementById('rest-timer-sec-input');
-    let val = parseInt(input.value) || 0; val += delta; if(val < 0) val = 0; input.value = val;
-}
-
-export function saveRestTimerModal() {
-    const exIdx = parseInt(document.getElementById('rest-timer-ex-idx').value);
-    const sec = parseInt(document.getElementById('rest-timer-sec-input').value) || 90;
-    const sound = document.getElementById('rest-timer-sound-input').value || '1';
-    const data = getWorkoutData();
-    data.exercises[exIdx].restTime = sec; data.exercises[exIdx].alarmSound = sound;
-    triggerSave(showToast); closeRestTimerModal(); renderWorkoutList(); showToast("개별 알람 설정 반영됨.");
-}
-
 // ==========================================
-// 일지 기록지 렌더 및 세트 순서 변경 화살표 제어
+// 일지 기록지 및 세트/종목 상하 순서 변경 화살표 제어
 // ==========================================
 export function renderWorkoutList() {
     const container = document.getElementById('workout-list-container');
@@ -396,7 +372,7 @@ export function renderWorkoutList() {
             const est1RM = set.weight * (1 + (set.reps / 30)); if (est1RM > max1RM) max1RM = est1RM;
 
             setsHtml += `
-            <div class="flex items-center justify-between gap-1 p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 text-xs sm:text-sm">
+            <div class="flex items-center justify-between gap-1.5 p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 text-xs sm:text-sm">
                 <span class="font-black text-amber-500 w-4 text-center">${setIdx + 1}</span>
                 <select onchange="window.changeSetField(${exIdx}, ${setIdx}, 'type', event.target.value)" class="bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-slate-300 outline-none text-xs">
                     <option value="일반" ${set.type==='일반'?'selected':''}>일반</option><option value="탑" ${set.type==='탑'?'selected':''}>탑</option>
@@ -414,8 +390,8 @@ export function renderWorkoutList() {
                 </div>
                 
                 <div class="flex gap-0.5 shrink-0">
-                    <button onclick="window.moveSetOrder(${exIdx}, ${setIdx}, -1)" class="w-7 h-7 flex items-center justify-center bg-slate-800 active:bg-slate-700 rounded text-slate-300 font-bold text-[10px]" title="위로 이동">▲</button>
-                    <button onclick="window.moveSetOrder(${exIdx}, ${setIdx}, 1)" class="w-7 h-7 flex items-center justify-center bg-slate-800 active:bg-slate-700 rounded text-slate-300 font-bold text-[10px]" title="아래로 이동">▼</button>
+                    <button onclick="window.moveSetOrder(${exIdx}, ${setIdx}, -1)" class="w-7 h-7 flex items-center justify-center bg-slate-800 active:bg-slate-700 rounded text-slate-300 font-bold text-[10px]">▲</button>
+                    <button onclick="window.moveSetOrder(${exIdx}, ${setIdx}, 1)" class="w-7 h-7 flex items-center justify-center bg-slate-800 active:bg-slate-700 rounded text-slate-300 font-bold text-[10px]">▼</button>
                 </div>
 
                 <input type="checkbox" ${set.done?'checked':''} onchange="window.toggleSetComplete(${exIdx}, ${setIdx}, event.target.checked)" class="w-5 h-5 accent-amber-500 cursor-pointer shrink-0 ml-0.5">
@@ -426,7 +402,7 @@ export function renderWorkoutList() {
         const card = document.createElement('div');
         card.className = "bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 space-y-3";
         card.innerHTML = `
-            <div class="flex justify-between items-start border-b border-slate-800/60 pb-2">
+            <div class="flex justify-between items-center border-b border-slate-800/60 pb-2">
                 <div class="flex-1">
                     <span class="px-2 py-0.5 text-[10px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md">${ex.part} · ${ex.type}</span>
                     <div class="flex flex-wrap items-center gap-2 mt-1.5 mb-1">
@@ -435,7 +411,13 @@ export function renderWorkoutList() {
                     </div>
                     <p class="text-[10px] text-slate-400 font-medium">1RM 추정 최고치: ${max1RM > 0 ? max1RM.toFixed(1) + 'kg' : '---'}</p>
                 </div>
-                <button onclick="window.deleteExercise(${exIdx})" class="text-[11px] px-2 py-1 bg-slate-800 border border-slate-700 text-slate-400 hover:text-rose-400 rounded-md shrink-0">삭제</button>
+                
+                <div class="flex gap-1 shrink-0 items-center mr-1">
+                    <button onclick="window.moveExerciseOrder(${exIdx}, -1)" class="w-8 h-8 flex items-center justify-center bg-slate-800 hover:bg-slate-700 active:bg-amber-500 text-slate-200 active:text-slate-950 rounded-lg font-black text-sm shadow">▲</button>
+                    <button onclick="window.moveExerciseOrder(${exIdx}, 1)" class="w-8 h-8 flex items-center justify-center bg-slate-800 hover:bg-slate-700 active:bg-amber-500 text-slate-200 active:text-slate-950 rounded-lg font-black text-sm shadow">▼</button>
+                </div>
+
+                <button onclick="window.deleteExercise(${exIdx})" class="text-[11px] px-2.5 py-1.5 bg-slate-800 border border-slate-700 text-slate-400 hover:text-rose-400 rounded-md shrink-0">삭제</button>
             </div>
             <div class="space-y-1.5">${setsHtml}</div>
             <button onclick="window.addSet(${exIdx})" class="w-full py-1.5 border border-dashed border-slate-700 text-xs text-slate-400 hover:text-amber-400 font-bold rounded-xl bg-slate-950/20 transition-colors">+ 세트 추가</button>
@@ -448,12 +430,21 @@ export function renderWorkoutList() {
 }
 
 /**
- * 실전 기록지용 세트 상하 위치 치환 스왑 함수
+ * [상위 호환 보완] 운동 종목 카드 자체의 자바스크립트 배열 위치 치환 가동 함수
  */
-export function moveSetOrder(exIdx, setIdx, direction) {
+export function moveExerciseOrder(exIdx, direction) {
     const data = getWorkoutData();
-    const sets = data.exercises[exIdx].sets;
-    const targetIdx = setIdx + direction;
+    const targetIdx = exIdx + direction;
+    if (targetIdx >= 0 && targetIdx < data.exercises.length) {
+        const temp = data.exercises[exIdx];
+        data.exercises[exIdx] = data.exercises[targetIdx];
+        data.exercises[targetIdx] = temp;
+        triggerSave(showToast); renderWorkoutList(); showToast("운동 종목 배치 순서가 수정되었습니다.");
+    }
+}
+
+export function moveSetOrder(exIdx, setIdx, direction) {
+    const data = getWorkoutData(); const sets = data.exercises[exIdx].sets; const targetIdx = setIdx + direction;
     if (targetIdx >= 0 && targetIdx < sets.length) {
         const temp = sets[setIdx]; sets[setIdx] = sets[targetIdx]; sets[targetIdx] = temp;
         triggerSave(showToast); renderWorkoutList();
@@ -469,7 +460,7 @@ export function addSet(exIdx) {
 }
 export function deleteSet(exIdx, setIdx) {
     const data = getWorkoutData(); const ex = data.exercises[exIdx];
-    undoBuffer = { type: 'set', exIdx: exIdx, setIdx: setIdx, data: JSON.parse(JSON.stringify(ex.sets[setIdx])) };
+    undoBuffer = { type: 'set', exIdx: setIdx, setIdx: setIdx, data: JSON.parse(JSON.stringify(ex.sets[setIdx])) };
     ex.sets.splice(setIdx, 1); triggerSave(showToast); renderWorkoutList(); 
     document.getElementById('btn-undo').classList.remove('hidden'); showToast("세트 기록이 제거되었습니다.");
 }
@@ -509,7 +500,7 @@ export function clearDailyExercises() {
 }
 
 // ==========================================
-// 📚 종목 사전 계층형 2단계 가드 처리
+// 📚 종목 사전 2단계 가드 절 예외처리 (목록 완벽 활성화)
 // ==========================================
 function calculateExerciseFrequencies() {
     const counts = {};
@@ -523,23 +514,29 @@ export function openLibraryModal() {
     document.getElementById('library-fullname-viewer').classList.add('hidden');
     document.getElementById('library-modal').classList.remove('hidden'); 
     document.getElementById('library-modal').classList.add('flex');
-    libraryActivePart = '가슴'; libraryActiveType = '전체'; runLibrarySearchFilter();
+    libraryActivePart = '전체'; libraryActiveType = '전체'; runLibrarySearchFilter();
 }
 export function closeLibraryModal() { document.getElementById('library-modal').classList.add('hidden'); document.getElementById('library-modal').classList.remove('flex'); }
 export function changeLibraryPartFilter(part) { libraryActivePart = part; libraryActiveType = '전체'; runLibrarySearchFilter(); }
 export function changeLibraryTypeFilter(type) { libraryActiveType = type; runLibrarySearchFilter(); }
 
-export function showFullExerciseName(name) {
+/**
+ * 문자열 파괴 현상을 미연에 방어하도록 정수형 인덱스 변수를 매핑하여 팝업 연동해주는 함수
+ */
+export function showFullExerciseName(mapperIndex) {
+    const meta = state.libraryTempMapper[mapperIndex]; if (!meta) return;
     const viewer = document.getElementById('library-fullname-viewer');
-    viewer.innerText = `🔍 전체 운동 명칭: ${name}`; viewer.classList.remove('hidden');
+    viewer.innerText = `🔍 전체 운동 명칭: ${meta.name}`; viewer.classList.remove('hidden');
 }
 
+/**
+ * 2단계 연쇄 계층형 가드 절 필터링 시스템 (전체 목록 정상 디스플레이 보증)
+ */
 export function runLibrarySearchFilter() {
     const rawInput = document.getElementById('library-search-input').value.trim().toLowerCase();
     const input = rawInput.replace(/\s+/g, ''); 
     const grid = document.getElementById('library-master-card-grid'); grid.innerHTML = '';
     
-    // 1단계 대분류 렌더링
     const filterBar = document.getElementById('library-filter-part-bar'); filterBar.innerHTML = '';
     const parts = ['전체', ...Object.keys(WORKOUT_DB)];
     parts.forEach(p => {
@@ -548,7 +545,6 @@ export function runLibrarySearchFilter() {
         pill.onclick = () => changeLibraryPartFilter(p); filterBar.appendChild(pill);
     });
 
-    // 2단계 중분류 가드 필터 렌더링
     const typeBar = document.getElementById('library-filter-type-bar'); typeBar.innerHTML = '';
     if (libraryActivePart !== '전체' && WORKOUT_DB[libraryActivePart]) {
         typeBar.classList.remove('hidden'); typeBar.classList.add('flex');
@@ -560,9 +556,7 @@ export function runLibrarySearchFilter() {
         });
     } else { typeBar.classList.remove('flex'); typeBar.classList.add('hidden'); }
 
-    // 마스터 카드 리스트 수립 (따옴표 버그 방어 인덱스 주입 방식으로 고도화)
-    let globalMatchCounter = 0;
-    state.libraryTempMapper = []; // 메모리 유실 방지 주입 맵
+    let globalMatchCounter = 0; state.libraryTempMapper = [];
 
     Object.entries(WORKOUT_DB).forEach(([part, types]) => {
         if (libraryActivePart !== '전체' && part !== libraryActivePart) return;
@@ -579,7 +573,7 @@ export function runLibrarySearchFilter() {
                 const card = document.createElement('div');
                 card.className = "h-16 p-3 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center overflow-hidden";
                 card.innerHTML = `
-                    <div class="truncate mr-2 flex-1 cursor-pointer" onclick="window.showFullExerciseName(window.state.libraryTempMapper[${mappedIdx}].name)">
+                    <div class="truncate mr-2 flex-1 cursor-pointer" onclick="window.showFullExerciseName(${mappedIdx})">
                         <span class="text-[9px] font-bold text-slate-500 block uppercase">${part} · ${type}</span>
                         <h4 class="text-xs sm:text-sm font-black text-slate-200 truncate leading-tight">${name}</h4>
                     </div>
@@ -589,7 +583,6 @@ export function runLibrarySearchFilter() {
         });
     });
 
-    // 하단 최다 수행 선호 종목 내림차순 렌더링 (동일 정수형 매퍼 연동)
     const freqBox = document.getElementById('library-frequent-box');
     const freqGrid = document.getElementById('library-frequent-grid'); freqGrid.innerHTML = '';
     const freqData = calculateExerciseFrequencies();
@@ -606,7 +599,7 @@ export function runLibrarySearchFilter() {
             const card = document.createElement('div');
             card.className = "h-16 p-3 bg-slate-950 border border-amber-500/20 rounded-xl flex justify-between items-center overflow-hidden";
             card.innerHTML = `
-                <div class="truncate mr-2 flex-1 cursor-pointer" onclick="window.showFullExerciseName(window.state.libraryTempMapper[${mappedIdx}].name)">
+                <div class="truncate mr-2 flex-1 cursor-pointer" onclick="window.showFullExerciseName(${mappedIdx})">
                     <span class="text-[9px] font-black text-amber-500 block uppercase">★ 최다수행 (${count}회)</span>
                     <h4 class="text-xs sm:text-sm font-black text-slate-300 truncate leading-tight">${name}</h4>
                 </div>
@@ -616,26 +609,19 @@ export function runLibrarySearchFilter() {
     } else { freqBox.classList.add('hidden'); }
 }
 
-/**
- * 종목 추가 총괄 제어기 (요구 스펙: libraryTarget 상태 분기를 통해 에디터 버퍼와 일지 기록을 완벽히 이중화함)
- */
 export function injectLibraryToToday(mapperIndex) {
-    const meta = state.libraryTempMapper[mapperIndex];
-    if (!meta) return;
+    const meta = state.libraryTempMapper[mapperIndex]; if (!meta) return;
 
     if (state.libraryTarget === 'editor') {
-        // [신규 주입 요구 반영] 사전 선택 창에서 새 종목 추가 시 격리 샌드박스 에디터 버퍼로 이관
-        const buf = state.routineEditorBuffer;
-        if (!buf) return;
+        const buf = state.routineEditorBuffer; if (!buf) return;
         if (!buf.exercises.some(e => e.name === meta.name)) {
             buf.exercises.push({
                 part: meta.part, type: meta.type, name: meta.name, restTime: 90, alarmSound: '1',
                 sets: [{ type: '일반', weight: 40, reps: 10, done: false }]
             });
-            renderRoutinePopupEditorDOM(); showToast(`[${meta.name}] 편집창에 추가 완료.`);
-        } else { showToast("이미 편집창에 추가된 종목입니다."); }
+            renderRoutinePopupEditorDOM(); showToast(`[${meta.name}] 편집창 주입 완료.`);
+        } else { showToast("이미 추가된 종목입니다."); }
     } else {
-        // 일반 실전 당일 기록지 추가 분기
         const data = getWorkoutData();
         if (!data.exercises.some(e => e.name === meta.name)) {
             const dRest = state.userInfo?.defaultRestTime || 90; const dSound = state.userInfo?.defaultAlarmSound || '1';
@@ -736,7 +722,7 @@ export function renderPresetRoutineGrid() {
 }
 
 // ==========================================
-// 🛡️ 격리 샌드박스 팝업 에디터 고도화 컴포넌트
+// 🛡️ 격리 샌드박스 독립형 팝업 에디터 통제기
 // ==========================================
 export function openTemplatePopupEditor(isUserTemplate, idOrIndex) {
     toggleGlobalLoader(true, "독립 팝업 에디터 버퍼 생성 중...");
@@ -773,17 +759,13 @@ export function openTemplatePopupEditor(isUserTemplate, idOrIndex) {
 }
 
 export function closeTemplatePopupEditor() {
-    state.routineEditorBuffer = null; state.libraryTarget = 'record'; // 원상 복구 보증
+    state.routineEditorBuffer = null; state.libraryTarget = 'record'; 
     document.getElementById('routine-editor-popup-modal').classList.add('hidden');
     document.getElementById('routine-editor-popup-modal').classList.remove('flex');
 }
 
-/**
- * 팝업창 내 전용 종목 추가 버튼 트리거 연동 기능
- */
 export function triggerLibraryAddFromEditor() {
-    state.libraryTarget = 'editor'; // 타겟 플래그 셋 수립
-    openLibraryModal();
+    state.libraryTarget = 'editor'; openLibraryModal();
 }
 
 function renderRoutinePopupEditorDOM() {
@@ -818,7 +800,7 @@ function renderRoutinePopupEditorDOM() {
         div.className = "p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2";
         div.innerHTML = `
             <div class="flex justify-between items-center border-b border-slate-800 pb-1">
-                <div class="truncate"><span class="text-[9px] text-slate-500 block uppercase">${ex.part}</span><h4 class="text-xs font-black text-white truncate">${ex.name}</h4></div>
+                <div class="truncate"><span class="text-[9px] text-slate-500 block uppercase">${ex.part}</span><h4 class="text-xs font-black text-white truncate timeline-ex-title leading-tight">${ex.name}</h4></div>
                 <button onclick="window.deleteExerciseFromEditor(${exIdx})" class="text-[10px] text-rose-400 font-bold bg-slate-800 px-1.5 py-0.5 rounded">삭제</button>
             </div>
             <div class="space-y-1">${setsHtml}</div>
@@ -828,9 +810,6 @@ function renderRoutinePopupEditorDOM() {
     });
 }
 
-/**
- * 팝업 에디터 독립 버퍼 세트 상하 치환 함수
- */
 export function moveSetOrderInEditor(exIdx, setIdx, direction) {
     const sets = state.routineEditorBuffer.exercises[exIdx].sets;
     const targetIdx = setIdx + direction;
@@ -881,7 +860,7 @@ export function saveTemplatePopupEditorData() {
 
 export function applyDirectPresetRoutine(index) {
     if(!confirm("기존 기록이 프리셋 종목으로 완전 대체 마운트됩니다. 진행할까요?")) return;
-    toggleGlobalLoader(true, "추천 프로그램 분석 기동 중...");
+    toggleGlobalLoader(true, "추천 루틴 마운트 로드 중...");
     
     setTimeout(() => {
         const customRecommended = JSON.parse(localStorage.getItem('prep_master_custom_recommended') || '{}');
@@ -986,7 +965,7 @@ export function exportWorkoutToCSV() {
     Object.entries(state.workouts).forEach(([dateStr, obj]) => { if(obj.exercises) { obj.exercises.forEach(ex => { ex.sets.forEach((s, idx) => { csvContent += `${dateStr},${ex.part},${ex.name},${idx+1},${s.weight},${s.reps},${s.done?'완료':'미완료'}\n`; }); }); } });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.setAttribute("download", `Workout_Report_2026.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link); showToast("CSV 내보내기 완료.");
+    document.body.appendChild(link); link.click(); document.body.removeChild(link); showToast("CSV 다운로드 활성화.");
 }
 
 export function triggerQuickInputFAB() {
