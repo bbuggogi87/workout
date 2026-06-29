@@ -1,6 +1,6 @@
 /**
  * 파일명: calendar.js
- * 역할: 훈련 일지 기록 관리, 웹 오디오 알람 신디사이징 및 통계 분석 컨트롤러 (독립 팝업 에디터 완비본)
+ * 역할: 훈련 일지 기록 관리, 웹 오디오 알람 신디사이징 및 통계 분석 컨트롤러 (무결성 최적화 완료본)
  */
 
 import { state } from './store.js';
@@ -11,7 +11,7 @@ let viewYear = 2026;
 let viewMonth = 5; 
 let restTimerInterval = null;
 let alarmAudioInterval = null;
-let libraryActivePart = '가슴';
+let libraryActivePart = '전체';
 let libraryActiveType = '전체'; 
 let undoBuffer = null;
 let currentTimerSeconds = 0;
@@ -63,17 +63,15 @@ window.triggerQuickInputFAB = triggerQuickInputFAB;
 window.closeQuickInputFABModal = closeQuickInputFABModal;
 window.saveQuickInputFABModal = saveQuickInputFABModal;
 
-// 편의 사양 및 팝업 에디터 함수 전역 컨텍스트 바인딩
+// 무결성 패치 지원 편의 모듈 전역 바인딩
 window.showFullExerciseName = showFullExerciseName;
 window.changeLibraryPartFilter = changeLibraryPartFilter;
 window.changeLibraryTypeFilter = changeLibraryTypeFilter;
-window.openIndependentPopupEditor = openTemplatePopupEditor; // 레거시 맵 백업
 window.openTemplatePopupEditor = openTemplatePopupEditor;
 window.closeTemplatePopupEditor = closeTemplatePopupEditor;
 window.addSetToEditor = addSetToEditor;
 window.deleteSetFromEditor = deleteSetFromEditor;
 window.changeEditorSetField = changeEditorSetField;
-window.saveIndependentPopupEditorData = saveTemplatePopupEditorData; // 레거시 맵 백업
 window.saveTemplatePopupEditorData = saveTemplatePopupEditorData;
 window.clearDailyExercises = clearDailyExercises;
 
@@ -85,7 +83,7 @@ export function showToast(msg) {
 }
 
 /**
- * 글로벌 비비드 로딩 레이어 표시 제어기
+ * 사용자 인터페이스 (UI: User Interface) 홀딩용 글로벌 비비드 로딩 레이어 제어 함수
  */
 function toggleGlobalLoader(show, text = "시스템 인프라 정밀 동기화 중...") {
     const loader = document.getElementById('global-loading-layer');
@@ -112,7 +110,7 @@ function getWorkoutData() {
 }
 
 // ==========================================
-// 시스템 설정 및 알람 환경 제어
+// 시스템 환경설정 파이프라인
 // ==========================================
 export function saveSystemSettings() {
     if(!state.userInfo) state.userInfo = {};
@@ -151,6 +149,9 @@ function loadSystemSettings() {
     if(alarmSoundEl) alarmSoundEl.value = dSound;
 }
 
+// ==========================================
+// 웹 오디오 API 신디사이저 엔진
+// ==========================================
 function playAudioTone(type) {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -331,6 +332,47 @@ function updateHomeDashboardWidgets() {
     });
 }
 
+export function calculateWorkoutDDay() {
+    const target = new Date(state.userInfo.targetDate || '2026-07-18');
+    const today = new Date();
+    const diffDays = Math.ceil((new Date(target.getFullYear(), target.getMonth(), target.getDate()) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / (1000 * 60 * 60 * 24));
+    const badgeEl = document.getElementById('badge-dday');
+    if (badgeEl) badgeEl.textContent = diffDays > 0 ? `D-${diffDays}일` : (diffDays === 0 ? `D-Day` : `D+${Math.abs(diffDays)}`);
+}
+
+// ==========================================
+// 달력 제어 컴포넌트
+// ==========================================
+export function renderCalendarGrid() {
+    const gridEl = document.getElementById('calendar-grid');
+    if(!gridEl) return; gridEl.innerHTML = '';
+    document.getElementById('calendar-month-year').textContent = `${viewYear}년 ${String(viewMonth + 1).padStart(2, '0')}월`;
+
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const lastDate = new Date(viewYear, viewMonth + 1, 0).getDate();
+    for (let i = 0; i < firstDay; i++) { gridEl.appendChild(document.createElement('div')); }
+
+    for (let day = 1; day <= lastDate; day++) {
+        const dayBtn = document.createElement('button');
+        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0 Month')}`;
+        dayBtn.textContent = day;
+        dayBtn.className = "p-3 rounded-xl font-bold text-sm transition-all flex flex-col items-center justify-center min-h-[52px] relative border border-transparent hover:border-slate-700 select-none";
+
+        const td = state.workouts[dateStr];
+        if (td && ((td.exercises && td.exercises.length > 0) || (td.weight > 0 || td.bf > 0 || td.smm > 0))) {
+            const dot = document.createElement('span'); dot.className = "w-1.5 h-1.5 bg-amber-500 rounded-full absolute bottom-1.5"; dayBtn.appendChild(dot);
+        }
+        if (dateStr === state.selectedDateStr) dayBtn.className += " active-day font-black text-slate-950";
+        else {
+            dayBtn.className += " bg-slate-800/40 text-slate-300";
+            const dayOfWeek = new Date(viewYear, viewMonth, day).getDay();
+            if (dayOfWeek === 0) dayBtn.className += " text-rose-400"; if (dayOfWeek === 6) dayBtn.className += " text-sky-400";
+        }
+        dayBtn.onclick = () => selectWorkoutDate(dateStr);
+        gridEl.appendChild(dayBtn);
+    }
+}
+
 export function moveMonth(direction) {
     viewMonth += direction;
     if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; } else if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
@@ -382,7 +424,7 @@ export function saveRestTimerModal() {
 }
 
 // ==========================================
-// 일지 기록지 인터페이스 컴포넌트 렌더러
+// 일지 기록지 및 세트 편집 엔진
 // ==========================================
 export function renderWorkoutList() {
     const container = document.getElementById('workout-list-container');
@@ -473,8 +515,7 @@ export function changeSetField(exIdx, setIdx, field, val) {
     if (field === 'weight' || field === 'reps') set[field] = parseFloat(val) || 0; else set[field] = val; triggerSave(showToast);
 }
 export function toggleSetComplete(exIdx, setIdx, isChecked) {
-    const data = getWorkoutData();
-    data.exercises[exIdx].sets[setIdx].done = isChecked;
+    const data = getWorkoutData(); data.exercises[exIdx].sets[setIdx].done = isChecked;
     triggerSave(showToast); renderWorkoutList();
     if (isChecked) {
         const customRestTime = data.exercises[exIdx].restTime || state.userInfo?.defaultRestTime || 90;
@@ -488,10 +529,6 @@ export function deleteExercise(exIdx) {
     }
 }
 
-/**
- * [추가 기능 사양] 선택 일지의 훈련 정보만 전수 일괄 삭제하는 안전한 초기화 모듈
- * 특징: 신체 계측(weight, bf, smm) 데이터는 완전하게 보존 격리처리함
- */
 export function clearDailyExercises() {
     const data = getWorkoutData();
     if (data.exercises.length === 0) { showToast("삭제할 운동 정보가 존재하지 않습니다."); return; }
@@ -509,8 +546,18 @@ export function clearDailyExercises() {
 }
 
 // ==========================================
-// 📚 종목 사전 2단계 연쇄 계층형 필터 시스템 (오류 원천 수정 완료)
+// 📚 종목 사전 2단계 연쇄 필터 시스템
 // ==========================================
+function getHangulChosung(str) {
+    const cho = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+    let result = "";
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i) - 44032;
+        if (code >= 0 && code <= 11172) result += cho[Math.floor(code / 588)]; else result += str.charAt(i);
+    }
+    return result;
+}
+
 function calculateExerciseFrequencies() {
     const counts = {};
     Object.values(state.workouts).forEach(w => {
@@ -523,7 +570,7 @@ export function openLibraryModal() {
     document.getElementById('library-fullname-viewer').classList.add('hidden');
     document.getElementById('library-modal').classList.remove('hidden'); 
     document.getElementById('library-modal').classList.add('flex');
-    libraryActivePart = '가슴'; // 기본 부위 고정 배치하여 크래시 방지
+    libraryActivePart = '가슴'; // 기본 부위 선점 매핑으로 크래시 방어
     libraryActiveType = '전체'; 
     runLibrarySearchFilter();
 }
@@ -551,7 +598,7 @@ export function runLibrarySearchFilter() {
     const input = rawInput.replace(/\s+/g, ''); 
     const grid = document.getElementById('library-master-card-grid'); grid.innerHTML = '';
     
-    // 1단계 대분류 수평 렌더레일
+    // 1단계 대분류 수평 레일
     const filterBar = document.getElementById('library-filter-part-bar'); filterBar.innerHTML = '';
     const parts = ['전체', ...Object.keys(WORKOUT_DB)];
     parts.forEach(p => {
@@ -560,7 +607,7 @@ export function runLibrarySearchFilter() {
         pill.onclick = () => changeLibraryPartFilter(p); filterBar.appendChild(pill);
     });
 
-    // 2단계 중분류 연쇄 수평 렌더레일 (안전 가드 절 조건식 연동으로 TypeError 차단)
+    // 2단계 중분류 연쇄 수평 레일 (안전 가드 절 조건식 연동으로 TypeError 차단)
     const typeBar = document.getElementById('library-filter-type-bar'); typeBar.innerHTML = '';
     if (libraryActivePart !== '전체' && WORKOUT_DB[libraryActivePart]) {
         typeBar.classList.remove('hidden'); typeBar.classList.add('flex');
@@ -663,9 +710,6 @@ export function confirmSaveRoutine() {
     triggerSave(showToast); closeSaveRoutineModal(); showToast("루틴 백업 보존 성공.");
 }
 
-/**
- * 루틴 즉시 불러오기 바인딩 모듈 (지연 오작동 제거 및 비동기 처리 적용)
- */
 export function applyTemplate(tmplId) {
     if (!confirm("오늘 일지의 기존 기록이 초기화되고 복원 프리셋으로 대체됩니다. 계속할까요?")) return;
     toggleGlobalLoader(true, "루틴 프리셋 복원 및 렌더 가동 중...");
@@ -689,14 +733,10 @@ export function deleteTemplate(tmplId) {
     if (confirm("이 프리셋을 영구 삭제하시겠습니까?")) { state.templates = state.templates.filter(t => t.id !== tmplId); triggerSave(showToast); renderTemplateList(); }
 }
 
-/**
- * 분할루틴 카드 보드 생성 프레임
- */
 export function renderPresetRoutineGrid() {
     const gridBox = document.getElementById('routine-preset-grid-box'); if(!gridBox) return; gridBox.innerHTML = '';
-    const customRecommended = JSON.parse(localStorage.getItem('prep_master_custom_recommended') || '{}');
 
-    // 1. 유저 백업 루틴 보드 나열
+    // 1. 유저 맞춤형 루틴 목록
     if (state.templates && state.templates.length > 0) {
         const titleSec = document.createElement('div'); titleSec.className = "col-span-1 sm:col-span-2 border-b border-slate-800 pb-1 mt-2";
         titleSec.innerHTML = `<h3 class="text-xs font-black text-sky-400 uppercase tracking-wider">💾 내가 백업한 맞춤형 프리셋 루틴</h3>`;
@@ -708,18 +748,19 @@ export function renderPresetRoutineGrid() {
                 <div><h3 class="text-sm font-black text-white uppercase">${tmpl.title}</h3><p class="text-xs text-slate-400 mt-2 leading-relaxed break-all">${tmpl.exercises.map(e => e.name).join(', ')}</p></div>
                 <div class="flex gap-2">
                     <button class="flex-1 bg-slate-800 hover:bg-sky-500 hover:text-white text-xs font-bold py-3 rounded-xl border border-slate-700 transition-colors" onclick="window.applyTemplate(${tmpl.id})">가져오기</button>
-                    <button class="flex-1 bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-xs font-black py-3 rounded-xl border border-slate-800 transition-colors" onclick="window.openTemplatePopupEditor('${tmpl.title}', true, ${tmpl.id})">✏️ 루틴 편집</button>
+                    <button class="flex-1 bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-xs font-black py-3 rounded-xl border border-slate-800 transition-colors" onclick="window.openTemplatePopupEditor(true, ${tmpl.id})">✏️ 루틴 편집</button>
                 </div>`;
             gridBox.appendChild(card);
         });
     }
 
-    // 2. 6대 마스터 프로그램 나열 (오버라이드 최우선 순위 정렬)
+    // 2. 6대 가중치 마스터 추천 프로그램 목록
     const titleSecRec = document.createElement('div'); titleSecRec.className = "col-span-1 sm:col-span-2 border-b border-slate-800 pb-1 mt-4";
     titleSecRec.innerHTML = `<h3 class="text-xs font-black text-amber-500 uppercase tracking-wider">🌟 보디빌딩 협업자 추천 분할 마스터 프로그램</h3>`;
     gridBox.appendChild(titleSecRec);
 
-    RECOMMENDED_ROUTINES.forEach(prog => {
+    RECOMMENDED_ROUTINES.forEach((prog, idx) => {
+        const customRecommended = JSON.parse(localStorage.getItem('prep_master_custom_recommended') || '{}');
         const hasCustom = !!customRecommended[prog.title];
         const displayExercises = hasCustom ? customRecommended[prog.title] : prog.exercises;
         const subBadge = hasCustom ? `<span class="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded ml-1.5">수정됨</span>` : '';
@@ -728,33 +769,43 @@ export function renderPresetRoutineGrid() {
         card.innerHTML = `
             <div><h3 class="text-sm font-black text-slate-100 uppercase flex items-center">${prog.title} ${subBadge}</h3><p class="text-xs text-slate-400 mt-2 leading-relaxed break-keep">${displayExercises.map(e => e.name).join(', ')}</p></div>
             <div class="flex gap-2">
-                <button class="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold py-3 rounded-xl border border-slate-700 transition-colors" onclick='window.applyDirectPresetRoutine(${JSON.stringify(displayExercises.map(e => e.name))})'>가동 마운트</button>
-                <button class="flex-1 bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-xs font-black py-3 rounded-xl border border-slate-800 transition-colors" onclick="window.openTemplatePopupEditor('${prog.title}', false, null)">✏️ 루틴 편집</button>
+                <button class="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold py-3 rounded-xl border border-slate-700 transition-colors" onclick='window.applyDirectPresetRoutine(${idx})'>가동 마운트</button>
+                <button class="flex-1 bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-xs font-black py-3 rounded-xl border border-slate-800 transition-colors" onclick="window.openTemplatePopupEditor(false, ${idx})">✏️ 루틴 편집</button>
             </div>`;
         gridBox.appendChild(card);
     });
 }
 
 // ==========================================
-// 🛡️ 격리형 샌드박스 팝업 독립 에디터 제어 핵심 로직
+// 🛡️ 격리형 샌드박스 팝업 독립 에디터 제어 엔진 (숫자 라우팅 패치 완료)
 // ==========================================
-export function openTemplatePopupEditor(title, isUserTemplate, templateId) {
+export function openTemplatePopupEditor(isUserTemplate, idOrIndex) {
     toggleGlobalLoader(true, "독립 팝업 에디터 버퍼 빌딩 중...");
     
     setTimeout(() => {
+        let title = '';
         let targetExercises = [];
+        
         if (isUserTemplate) {
-            const tmpl = state.templates.find(t => t.id === templateId);
-            if (tmpl) targetExercises = JSON.parse(JSON.stringify(tmpl.exercises));
+            const tmpl = state.templates.find(t => t.id === idOrIndex);
+            if (tmpl) {
+                title = tmpl.title;
+                targetExercises = JSON.parse(JSON.stringify(tmpl.exercises));
+            }
         } else {
-            const customRecommended = JSON.parse(localStorage.getItem('prep_master_custom_recommended') || '{}');
-            if (customRecommended[title]) { targetExercises = customRecommended[title]; } 
-            else { const orig = RECOMMENDED_ROUTINES.find(r => r.title === title); if (orig) targetExercises = orig.exercises; }
+            const orig = RECOMMENDED_ROUTINES[idOrIndex];
+            if (orig) {
+                title = orig.title;
+                const customRecommended = JSON.parse(localStorage.getItem('prep_master_custom_recommended') || '{}');
+                if (customRecommended[title]) { targetExercises = customRecommended[title]; } 
+                else { targetExercises = orig.exercises; }
+            }
         }
 
-        // 전역 상태 간섭 방지 독립형 샌드박스 큐 메모리 할당
+        if (!title) { toggleGlobalLoader(false); showToast("루틴을 식별할 수 없습니다."); return; }
+
         state.routineEditorBuffer = {
-            title: title, isUserTemplate: isUserTemplate, templateId: templateId,
+            title: title, isUserTemplate: isUserTemplate, idOrIndex: idOrIndex,
             exercises: targetExercises.map(ex => ({
                 part: ex.part, type: ex.type, name: ex.name, restTime: ex.restTime || 90, alarmSound: ex.alarmSound || '1',
                 sets: (ex.sets && ex.sets.length > 0) ? JSON.parse(JSON.stringify(ex.sets)) : [{ type: '일반', weight: 40, reps: 10, done: false }]
@@ -776,9 +827,6 @@ export function closeTemplatePopupEditor() {
     document.getElementById('routine-editor-popup-modal').classList.remove('flex');
 }
 
-/**
- * 팝업창 내부에 일지 기록지와 동일 사양의 에디터 노드를 독립 렌더링하는 함수
- */
 function renderRoutinePopupEditorDOM() {
     const container = document.getElementById('routine-editor-list-container');
     if (!container || !state.routineEditorBuffer) return;
@@ -816,7 +864,6 @@ function renderRoutinePopupEditorDOM() {
     });
 }
 
-// 팝업 에디터 내부 인터페이스 기동 액션 세트
 export function addSetToEditor(exIdx) {
     const ex = state.routineEditorBuffer.exercises[exIdx];
     let w = 40, r = 10; if(ex.sets.length > 0) { w = ex.sets[ex.sets.length-1].weight; r = ex.sets[ex.sets.length-1].reps; }
@@ -826,27 +873,29 @@ export function deleteSetFromEditor(exIdx, setIdx) {
     state.routineEditorBuffer.exercises[exIdx].sets.splice(setIdx, 1); renderRoutinePopupEditorDOM();
 }
 window.deleteExerciseFromEditor = function(exIdx) {
-    if(confirm("이 종목을 편집 리스트에서 배제할까요?")) { state.routineEditorBuffer.exercises.splice(exIdx, 1); renderRoutinePopupEditorDOM(); }
+    if(confirm("이 종목을 편집 리스트에서 제거할까요?")) { state.routineEditorBuffer.exercises.splice(exIdx, 1); renderRoutinePopupEditorDOM(); }
 };
 export function changeEditorSetField(exIdx, setIdx, field, val) {
     state.routineEditorBuffer.exercises[exIdx].sets[setIdx][field] = parseFloat(val) || 0;
 }
 
-/**
- * 독립 에디터 내에서 수정한 구조를 확정 반영하여 영구 영속화 세이브를 처리하는 파이프라인
- */
 export function saveTemplatePopupEditorData() {
     if (!state.routineEditorBuffer) return;
     toggleGlobalLoader(true, "편집 완료본 정밀 영속 구조 덮어쓰기 중...");
 
     setTimeout(() => {
         const buffer = state.routineEditorBuffer;
+        const optimizedExercises = buffer.exercises.map(ex => ({
+            part: ex.part, type: ex.type, name: ex.name, restTime: ex.restTime, alarmSound: ex.alarmSound,
+            sets: ex.sets.map(s => ({ type: s.type, weight: s.weight, reps: s.reps, done: false }))
+        }));
+
         if (buffer.isUserTemplate) {
-            const tmpl = state.templates.find(t => t.id === buffer.templateId);
-            if (tmpl) tmpl.exercises = buffer.exercises;
+            const tmpl = state.templates.find(t => t.id === buffer.idOrIndex);
+            if (tmpl) tmpl.exercises = optimizedExercises;
         } else {
             const customRecommended = JSON.parse(localStorage.getItem('prep_master_custom_recommended') || '{}');
-            customRecommended[buffer.title] = buffer.exercises;
+            customRecommended[buffer.title] = optimizedExercises;
             localStorage.setItem('prep_master_custom_recommended', JSON.stringify(customRecommended));
         }
 
@@ -854,24 +903,36 @@ export function saveTemplatePopupEditorData() {
         closeTemplatePopupEditor();
         renderPresetRoutineGrid();
         toggleGlobalLoader(false);
-        showToast(`[${buffer.title}] 오버라이드 보존에 성공했습니다.`);
+        showToast(`[${buffer.title}] 덮어쓰기 저장이 영구 영속화되었습니다.`);
     }, 300);
 }
 
-export function applyDirectPresetRoutine(namesArray) {
+export function applyDirectPresetRoutine(index) {
     if(!confirm("기존 기록이 프리셋 종목으로 완전 대체 마운트됩니다. 진행할까요?")) return;
-    const data = getWorkoutData();
-    const dRest = state.userInfo?.defaultRestTime || 90; const dSound = state.userInfo?.defaultAlarmSound || '1';
-    data.exercises = namesArray.map(name => {
-        let fPart = '전신', fType = '기타';
-        Object.entries(WORKOUT_DB).forEach(([p, types]) => Object.entries(types).forEach(([t, nList]) => { if(nList.includes(name)) { fPart = p; fType = t; } }));
-        return { part: fPart, type: fType, name: name, restTime: dRest, alarmSound: dSound, sets: [{type:'일반', weight:40, reps:10, done:false}] };
-    });
-    triggerSave(showToast); switchCalendarTab('tab-record'); showToast("프로그램 가동 마운트 완료.");
+    toggleGlobalLoader(true, "추천 루틴 마운트 로드 중...");
+    
+    setTimeout(() => {
+        const customRecommended = JSON.parse(localStorage.getItem('prep_master_custom_recommended') || '{}');
+        const orig = RECOMMENDED_ROUTINES[index];
+        if (!orig) { toggleGlobalLoader(false); return; }
+        const displayExercises = customRecommended[orig.title] || orig.exercises;
+        
+        const data = getWorkoutData();
+        const dRest = state.userInfo?.defaultRestTime || 90; const dSound = state.userInfo?.defaultAlarmSound || '1';
+        data.exercises = displayExercises.map(ex => ({
+            part: ex.part, type: ex.type, name: ex.name, restTime: dRest, alarmSound: dSound,
+            sets: [{type:'일반', weight:40, reps:10, done:false}]
+        }));
+        triggerSave(showToast); 
+        switchCalendarTab('tab-record'); 
+        renderWorkoutList();
+        toggleGlobalLoader(false);
+        showToast(`[${orig.title}] 가동 마운트 완료.`);
+    }, 300);
 }
 
 // ==========================================
-// 다차원 입체 리포트 분석 (Chart.js 연동)
+// 다차원 분석 리포트 통계 모듈
 // ==========================================
 function renderWorkoutAnalysisCharts() {
     const cvsBalance = document.getElementById('chart-workout-analysis');
@@ -943,7 +1004,7 @@ export async function triggerSettingExport() {
         if (window.showSaveFilePicker) {
             const handle = await window.showSaveFilePicker({ suggestedName: fileName, types: [{ description: 'JSON Backup File', accept: {'application/json': ['.json']} }] });
             const writable = await handle.createWritable(); await writable.write(dataStr); await writable.close();
-            showToast("선택하신 폴더 위치에 파일이 안전하게 저장되었습니다.");
+            showToast("보안 지정 폴더에 정상 보존되었습니다.");
         } else {
             const blob = new Blob([dataStr], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileName; link.click();
             showToast("다운로드 폴더에 백업 파일이 저장되었습니다.");
@@ -999,4 +1060,3 @@ initializeFirebase((success) => {
     loadSystemSettings(); switchCalendarTab('tab-home');
     setInterval(() => { saveToLocal(); }, 60000);
 });
-
