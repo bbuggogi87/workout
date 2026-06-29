@@ -122,7 +122,7 @@ export const WORKOUT_DB = {
 export const AVAILABLE_PLATES = [20, 15, 10, 5, 2.5];
 export const BAR_WEIGHT = 20;
 
-// [신규 확장 상수 수립] 6대 마스터 추천 운동 루틴 세트 프로그램 구조 고정 분리
+// [마스터 프리셋 데이터베이스] 선수 요청에 의한 6대 추천 운동 루틴 최적화 세트 상수 주입
 export const RECOMMENDED_ROUTINES = [
   {
     title: "(1) 가슴 & 어깨",
