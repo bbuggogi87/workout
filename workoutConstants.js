@@ -122,7 +122,7 @@ export const WORKOUT_DB = {
 export const AVAILABLE_PLATES = [20, 15, 10, 5, 2.5];
 export const BAR_WEIGHT = 20;
 
-// [마스터 상수] 보디빌딩 협업자 6대 추천 운동 프로그램 구조 분리 정의
+// [신규 확장 상수 수립] 6대 마스터 추천 운동 루틴 세트 프로그램 구조 고정 분리
 export const RECOMMENDED_ROUTINES = [
   {
     title: "(1) 가슴 & 어깨",
@@ -193,12 +193,12 @@ export const RECOMMENDED_ROUTINES = [
     title: "(6) 이두 & 삼두 & 전완근",
     exercises: [
       { part: "팔(이두)", type: "프리웨이트/맨몸", name: "EZ바 컬" },
-      { part: "팔(삼두)", type: "프리웨이트/맨몸", name: "바벨 오버헤드 익스텐션" },
       { part: "팔(이두)", type: "프리웨이트/맨몸", name: "인클라인 해머 컬" },
-      { part: "팔(삼두)", type: "머신/스미스", name: "딥스 머신" },
       { part: "팔(이두)", type: "머신/스미스", name: "머신 바이셉스 컬" },
-      { part: "팔(삼두)", type: "프리웨이트/맨몸", name: "덤벨 킥백" },
-      { part: "팔(이두)", type: "프리웨이트/맨몸", name: "리버스 컬" }
+      { part: "팔(이두)", type: "프리웨이트/맨몸", name: "리버스 컬" },
+      { part: "팔(삼두)", type: "프리웨이트/맨몸", name: "바벨 오버헤드 익스텐션" },
+      { part: "팔(삼두)", type: "머신/스미스", name: "딥스 머신" },
+      { part: "팔(삼두)", type: "프리웨이트/맨몸", name: "덤벨 킥백" }
     ]
   }
 ];
