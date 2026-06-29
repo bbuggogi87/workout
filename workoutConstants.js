@@ -1,6 +1,6 @@
 /**
  * 파일명: workoutConstants.js
- * 역할: 확장 운동 라이브러리 데이터베이스 및 편의 기능용 상수 정의 (추천 프로그램 마스터 결합본)
+ * 역할: 확장 운동 라이브러리 데이터베이스 및 편의 기능용 상수 정의 (6대 마스터 프로그램 결합본)
  */
 
 export const WORKOUT_DB = {
@@ -122,7 +122,7 @@ export const WORKOUT_DB = {
 export const AVAILABLE_PLATES = [20, 15, 10, 5, 2.5];
 export const BAR_WEIGHT = 20;
 
-// [신규 확장] 사용자가 손쉽게 수정 및 관리할 수 있도록 배치한 6대 추천 운동 루틴 세트 데이터베이스 상수 규격
+// [마스터 상수] 보디빌딩 협업자 6대 추천 운동 프로그램 구조 분리 정의
 export const RECOMMENDED_ROUTINES = [
   {
     title: "(1) 가슴 & 어깨",
@@ -193,12 +193,12 @@ export const RECOMMENDED_ROUTINES = [
     title: "(6) 이두 & 삼두 & 전완근",
     exercises: [
       { part: "팔(이두)", type: "프리웨이트/맨몸", name: "EZ바 컬" },
-      { part: "팔(이두)", type: "프리웨이트/맨몸", name: "인클라인 해머 컬" },
-      { part: "팔(이두)", type: "머신/스미스", name: "머신 바이셉스 컬" },
-      { part: "팔(이두)", type: "프리웨이트/맨몸", name: "리버스 컬" },
       { part: "팔(삼두)", type: "프리웨이트/맨몸", name: "바벨 오버헤드 익스텐션" },
+      { part: "팔(이두)", type: "프리웨이트/맨몸", name: "인클라인 해머 컬" },
       { part: "팔(삼두)", type: "머신/스미스", name: "딥스 머신" },
-      { part: "팔(삼두)", type: "프리웨이트/맨몸", name: "덤벨 킥백" }
+      { part: "팔(이두)", type: "머신/스미스", name: "머신 바이셉스 컬" },
+      { part: "팔(삼두)", type: "프리웨이트/맨몸", name: "덤벨 킥백" },
+      { part: "팔(이두)", type: "프리웨이트/맨몸", name: "리버스 컬" }
     ]
   }
 ];
