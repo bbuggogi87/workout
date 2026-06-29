@@ -1,6 +1,6 @@
 /**
  * 파일명: workoutConstants.js
- * 역할: 확장 운동 라이브러리 데이터베이스 및 편의 기능용 상수 정의 (누락 운동 보완본)
+ * 역할: 확장 운동 라이브러리 데이터베이스 및 편의 기능용 상수 정의
  */
 
 export const WORKOUT_DB = {
@@ -118,7 +118,6 @@ export const WORKOUT_DB = {
     ]
   }
 };
-
 
 // 바벨 원판 계산기용 기준 가용 원판 목록 (단위: kg)
 export const AVAILABLE_PLATES = [20, 15, 10, 5, 2.5];
