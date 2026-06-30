@@ -526,3 +526,495 @@ function updateKpiSnapshotCards() {
     cLbl.innerText = `평균 수면: ${(sumSleep/len).toFixed(1)}h | 컨디션: ${(sumCond/len).toFixed(1)}점`;
     bLbl.innerText = `배변 빈도: ${Math.round((bowelCount/len)*100)}%`;
 }
+
+/**
+ * 파일명: app.js (4단계 분할 구현본)
+ * 역할: 대시보드 동적 매트릭스 필터 제어 및 Chart.js 활용 다중 축 시계열 혼합 차트 드라이버
+ * 변경사항: 세그먼트 터치에 따른 3단 레이어 시각적 강조 포커싱 및 모드별 차트 축 재매핑 엔진 구현 완료
+ */
+
+import { state } from './store.js';
+import { saveToLocal } from './services.js';
+
+// 브라우저 전역 윈도우 (window) 네임스페이스 바인딩 (HTML 레이어 인라인 호출 규격 보장)
+window.setMatrixFilter = setMatrixFilter;
+window.updateWeightTrendChart = updateWeightTrendChart;
+
+// 4단계 내부 관리용 단독 차트 인스턴스 보관 플래그
+let mixChartInstance = null;
+
+/**
+ * 1. 대시보드 최상단 동적 매트릭스 필터 제어 함수
+ * 목적: 선택된 핵심 성과 지표(KPI: Key Performance Indicator) 도메인 외의 카드들을 반투명 처리하여 시인성을 극대화합니다.
+ * @param {string} filterType - 필터 모드 식별자 ('all', 'weight', 'macros', 'condition')
+ */
+export function setMatrixFilter(filterType) {
+    // 글로벌 상태 객체에 현재 필터 모드 최전선 갱신 기입
+    state.weightRecordFilter = filterType;
+
+    // 1. 필터 칩 버튼의 시각적 활성화 활성 상태 클래스 토글
+    const chips = ['all', 'weight', 'macros', 'condition'];
+    chips.forEach(c => {
+        const btn = document.getElementById('chip-filter-all'.replace('all', c));
+        if (btn) {
+            if (c === filterType) {
+                btn.className = "px-4 py-2 text-xs font-black rounded-xl bg-amber-500 text-slate-950 transition-all shadow-md active:scale-95";
+            } else {
+                btn.className = "px-4 py-2 text-xs font-bold rounded-xl bg-slate-900 border border-slate-800 text-slate-400 transition-all";
+            }
+        }
+    });
+
+    // 2. 레이어 1 (KPI 카드) 및 레이어 3 (타임라인 상세 뷰) 문서 객체 모델(DOM: Document Object Model) 강조 동적 결합
+    const cardWeight = document.getElementById('kpi-card-weight');
+    const cardMacros = document.getElementById('kpi-card-macros');
+    const cardCond = document.getElementById('kpi-card-condition');
+
+    // 모든 강조 스타일 가드 초기화 초기화 집행
+    [cardWeight, cardMacros, cardCond].forEach(card => {
+        if (card) card.className = "glass-panel p-4 rounded-xl border border-slate-800 transition-all duration-300 opacity-100 scale-100";
+    });
+    if (cardCond) cardCond.className += " col-span-2"; // 레이아웃 격리 유지
+
+    // 선택 모드에 따른 고대비 포커싱 링 및 반투명(opacity-25) 클래스 동적 바인딩
+    if (filterType === 'weight') {
+        if (cardMacros) cardMacros.className += " opacity-25 scale-95";
+        if (cardCond) cardCond.className += " opacity-25 scale-95";
+        if (cardWeight) cardWeight.className = cardWeight.className.replace('border-slate-800', 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] scale-[1.02]');
+    } else if (filterType === 'macros') {
+        if (cardWeight) cardWeight.className += " opacity-25 scale-95";
+        if (cardCond) cardCond.className += " opacity-25 scale-95";
+        if (cardMacros) cardMacros.className = cardMacros.className.replace('border-slate-800', 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)] scale-[1.02]');
+    } else if (filterType === 'condition') {
+        if (cardWeight) cardWeight.className += " opacity-25 scale-95";
+        if (cardMacros) cardMacros.className += " opacity-25 scale-95";
+        if (cardCond) cardCond.className = cardCond.className.replace('border-slate-800', 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.2)] scale-[1.02]');
+    }
+
+    // 3. 레이어 3 타임라인 목록 내 텍스트 스케일링 가동 제어
+    const sortedDates = Object.keys(state.workouts).filter(d => state.workouts[d].weight > 0);
+    sortedDates.forEach(dateStr => {
+        const txtWeight = document.getElementById(`txt-scale-weight-${dateStr}`);
+        const txtDelta = document.getElementById(`txt-scale-delta-${dateStr}`);
+        const txtBowel = document.getElementById(`txt-scale-bowel-${dateStr}`);
+        
+        if (txtWeight && txtDelta && txtBowel) {
+            // 기본 크기 리셋
+            txtWeight.className = "text-sm font-black text-white mr-1.5 transition-all";
+            txtDelta.className = txtDelta.className.replace('text-base', 'text-xs').replace('font-black', 'font-bold');
+            txtBowel.className = "text-xs font-bold text-amber-500 transition-all";
+
+            // 필터 선택 정보 145% 강조 확대 스위칭
+            if (filterType === 'weight') {
+                txtWeight.className = "text-base font-black text-amber-400 mr-1.5 transition-all";
+                txtDelta.className = txtDelta.className.replace('text-xs', 'text-sm').replace('font-bold', 'font-black');
+            } else if (filterType === 'condition') {
+                txtBowel.className = "text-base font-black text-sky-400 transition-all";
+            }
+        }
+    });
+
+    // 4. 레이어 2 시계열 차트 그래픽스 엔진 동적 동기화
+    updateWeightTrendChart();
+}
+
+/**
+ * 2. 레이어 2: 이중 축 동적 혼합 추세 차트 구동 엔진 함수
+ * 목적: 모바일 기기의 제한된 메모리 부하를 방지하기 위해 단일 인스턴스를 파괴 후 재건축하여 다중 축(Multi-Axis)을 렌더링합니다.
+ */
+export function updateWeightTrendChart() {
+    const canvas = document.getElementById('chart-weight-trend-mix');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    // 시간순(오름차순) 정렬 스크리닝을 통한 7일 타임라인 라벨 가공
+    const chronologicalDates = Object.keys(state.workouts)
+        .filter(date => state.workouts[date].weight > 0)
+        .sort((a, b) => new Date(a) - new Date(b));
+
+    const recent7Days = chronologicalDates.slice(-7);
+    const chartLabels = recent7Days.map(d => d.slice(5).replace('-', '/')); // 형식: MM/DD
+
+    // 메모리 누수(Memory Leak) 및 터치 버그 방지를 위해 기존 차트 인스턴스 영구 파괴
+    if (mixChartInstance) {
+        mixChartInstance.destroy();
+        mixChartInstance = null;
+    }
+
+    if (recent7Days.length === 0) return;
+
+    // 모드별 다차원 데이터셋 배열 추출 파이프라인
+    const filterMode = state.weightRecordFilter || 'all';
+    let datasets = [];
+    let optionsScales = {
+        x: { grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 10, weight: '600' } } }
+    };
+
+    if (filterMode === 'all') {
+        // [전체 종합 모드]: 공복 체중(Line, 좌측 Y축) + 총 섭취 열량(Bar, 우측 Y축)
+        datasets = [
+            {
+                type: 'line', label: '공복체중(kg)',
+                data: recent7Days.map(d => state.workouts[d].weight),
+                borderColor: '#F59E0B', backgroundColor: 'transparent',
+                borderWidth: 3, pointBackgroundColor: '#F59E0B',
+                yAxisID: 'yLeft', tension: 0.25
+            },
+            {
+                type: 'bar', label: '섭취열량(kcal)',
+                data: recent7Days.map(d => state.workouts[d].totalKcal || 0),
+                backgroundColor: 'rgba(30, 41, 59, 0.5)', borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1, borderRadius: 6, yAxisID: 'yRight'
+            }
+        ];
+
+        optionsScales.yLeft = {
+            position: 'left', grid: { color: 'rgba(255,255,255,0.03)' },
+            ticks: { color: '#F59E0B', font: { size: 10 } },
+            title: { display: false }
+        };
+        optionsScales.yRight = {
+            position: 'right', grid: { display: false },
+            ticks: { color: '#94A3B8', font: { size: 9 } },
+            title: { display: false }
+        };
+
+    } else if (filterMode === 'weight') {
+        // [체중 지표 모드]: 공복 체중선(Line) + 일간 체중 변화량(Bar) -> 고대비 단독 축 정렬
+        datasets = [
+            {
+                type: 'line', label: '공복체중(kg)',
+                data: recent7Days.map(d => state.workouts[d].weight),
+                borderColor: '#F59E0B', backgroundColor: 'transparent',
+                borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#F59E0B', yAxisID: 'yLeft', tension: 0.1
+            },
+            {
+                type: 'bar', label: '체중변화(kg)',
+                data: recent7Days.map(d => state.workouts[d].weightDelta || 0),
+                backgroundColor: recent7Days.map(d => (state.workouts[d].weightDelta || 0) > 0 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(14, 165, 233, 0.4)'),
+                borderColor: recent7Days.map(d => (state.workouts[d].weightDelta || 0) > 0 ? '#EF4444' : '#0EA5E9'),
+                borderWidth: 1.5, borderRadius: 4, yAxisID: 'yDelta'
+            }
+        ];
+
+        optionsScales.yLeft = {
+            position: 'left', grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#F59E0B', font: { size: 10 } }
+        };
+        optionsScales.yDelta = {
+            position: 'right', grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 10 } }
+        };
+
+    } else if (filterMode === 'macros') {
+        // [영양소 합산 모드]: 총 열량(Bar, 좌축) + 탄/단/지 실측 그램수(Line 적층형 구조 대조, 우축)
+        datasets = [
+            {
+                type: 'bar', label: '총칼로리(kcal)',
+                data: recent7Days.map(d => state.workouts[d].totalKcal || 0),
+                backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10B981',
+                borderWidth: 1.5, borderRadius: 6, yAxisID: 'yLeft'
+            },
+            {
+                type: 'line', label: '탄수화물(g)', data: recent7Days.map(d => state.workouts[d].carbs || 0),
+                borderColor: '#F59E0B', borderWidth: 2, pointRadius: 2, backgroundColor: 'transparent', yAxisID: 'yRight', tension: 0.2
+            },
+            {
+                type: 'line', label: '단백질(g)', data: recent7Days.map(d => state.workouts[d].protein || 0),
+                borderColor: '#10B981', borderWidth: 2, pointRadius: 2, backgroundColor: 'transparent', yAxisID: 'yRight', tension: 0.2
+            },
+            {
+                type: 'line', label: '지방(g)', data: recent7Days.map(d => state.workouts[d].fat || 0),
+                borderColor: '#0EA5E9', borderWidth: 2, pointRadius: 2, backgroundColor: 'transparent', yAxisID: 'yRight', tension: 0.2
+            }
+        ];
+
+        optionsScales.yLeft = { position: 'left', grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#10B981', font: { size: 9 } } };
+        optionsScales.yRight = { position: 'right', grid: { display: false }, ticks: { color: '#94A3B8', font: { size: 9 } } };
+
+    } else if (filterMode === 'condition') {
+        // [컨디션/대사 모드]: Y축을 1~10 평점 레일로 동적 동화매핑하여 컨디션(Line) + 눈바디(Line) + 수면(Line, 우축) 대조
+        datasets = [
+            {
+                type: 'line', label: '종합컨디션(점)', data: recent7Days.map(d => state.workouts[d].condition || 7),
+                borderColor: '#0EA5E9', borderWidth: 2.5, pointRadius: 3, backgroundColor: 'transparent', yAxisID: 'yLeft', tension: 0.3
+            },
+            {
+                type: 'line', label: '눈바디점수(점)', data: recent7Days.map(d => state.workouts[d].visualScore || 5),
+                borderColor: '#A855F7', borderWidth: 2.5, pointRadius: 3, backgroundColor: 'transparent', yAxisID: 'yLeft', tension: 0.3
+            },
+            {
+                type: 'line', label: '수면시간(h)', data: recent7Days.map(d => state.workouts[d].sleepTime || 0),
+                borderColor: '#64748B', borderWidth: 1.5, borderDash: [4, 4], pointRadius: 2, backgroundColor: 'transparent', yAxisID: 'yRight', tension: 0.1
+            }
+        ];
+
+        optionsScales.yLeft = { position: 'left', min: 1, max: 10, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#0EA5E9', stepSize: 1, font: { size: 10 } } };
+        optionsScales.yRight = { position: 'right', min: 0, max: 12, grid: { display: false }, ticks: { color: '#94A3B8', stepSize: 2, font: { size: 9 } } };
+    }
+
+    // 스마트폰 뷰포트 맞춤 하이퍼 매니지드 그래픽스 렌더링 집행
+    mixChartInstance = new Chart(ctx, {
+        data: { labels: chartLabels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 10, bottom: 5, left: 2, right: 2 } },
+            plugins: {
+                legend: {
+                    display: true, position: 'top', align: 'end',
+                    labels: { color: '#64748B', boxWidth: 8, boxHeight: 8, font: { size: 9, weight: '700' }, padding: 6 }
+                },
+                tooltip: {
+                    backgroundColor: '#0F172A', titleFont: { size: 11, weight: '900' },
+                    bodyFont: { size: 10, weight: '600' }, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
+                }
+            },
+            scales: optionsScales
+        }
+    });
+}
+
+/**
+ * 파일명: app.js (5단계 최종 분할 구현본)
+ * 역할: 엑셀(CSV: Comma-Separated Values) 데이터 백업/복원 엔진 및 글로벌 이벤트를 관장하는 초기화 통합 레이어
+ * 변경사항: \uFEFF BOM 헤더 주입형 내보내기, 정규식 날짜 복원 파서 및 키보드 레이아웃 왜곡 방어 가드 구현 완료
+ */
+
+import { state } from './store.js';
+import { saveToLocal, triggerSave } from './services.js';
+import { renderWeightRecordList, recalculateAllWeightDeltas, setMatrixFilter } from './app.js'; 
+
+// 브라우저 전역 윈도우 (window) 네임스페이스 바인딩 (인라인 HTML 트리거 바인딩 보장)
+window.exportWeightRecordsToCSV = exportWeightRecordsToCSV;
+window.importWeightRecordsFromCSV = importWeightRecordsFromCSV;
+window.initWeightRecordModule = initWeightRecordModule;
+
+/**
+ * 1. 고밀도 엑셀(CSV) 파일 내보내기 파이프라인 함수
+ * 목적: 20가지 종합 건강 지표를 UTF-8 인코딩 및 큰따옴표 이스케이프 가드를 적용하여 내보냅니다.
+ */
+export async function exportWeightRecordsToCSV() {
+    // 글로벌 비비드 로딩 레이어 즉시 가동 (모바일 연산 랙 방어)
+    const loader = document.getElementById('global-loading-layer');
+    if (loader) {
+        document.getElementById('global-loading-text').innerText = "보디빌딩 20대 변수 고밀도 엑셀 파일 생성 중...";
+        loader.classList.remove('hidden'); loader.classList.add('flex');
+    }
+
+    setTimeout(async () => {
+        // 마이크로소프트 엑셀(Microsoft Excel) 한글 깨짐 방지용 바이트 순서 표식 (BOM: Byte Order Mark) 주입
+        let csvContent = "\uFEFF";
+        
+        // 20가지 핵심 변수 표준 헤더 라인 정의
+        const headers = [
+            "일자", "요일", "공복체중(kg)", "체중변화량(kg)", "수면시간(시간)", 
+            "컨디션(1-10)", "눈바디점수(1-10)", "공복심박수(bpm)", "운동부위", 
+            "탄수화물(g)", "단백질(g)", "지방(g)", "총섭취칼로리(kcal)", "탄단지비율", 
+            "수분섭취(L)", "근력운동(분)", "유산소(분)", "배변활동(O/X)", "특이사항", "메모"
+        ];
+        csvContent += headers.join(",") + "\n";
+
+        // 전역 상태 타임라인 데이터를 시간 오름차순(과거->최신)으로 정렬하여 엑셀 가독성 극대화
+        const chronologicalDates = Object.keys(state.workouts)
+            .filter(d => state.workouts[d].weight > 0)
+            .sort((a, b) => new Date(a) - new Date(b));
+
+        chronologicalDates.forEach(dateStr => {
+            const data = state.workouts[dateStr];
+            
+            // 메모 및 특이사항 내 쉼표(,) 입력 시 구획 파괴 에러를 차단하기 위한 큰따옴표 이스케이프 가드 처리
+            const cleanSpecialNote = data.specialNote ? `"${data.specialNote.replace(/"/g, '""')}"` : '""';
+            const cleanMemo = data.memo ? `"${data.memo.replace(/"/g, '""')}"` : '""';
+
+            const row = [
+                dateStr,
+                data.dayOfWeek || "",
+                data.weight ? data.weight.toFixed(2) : "0.00",
+                data.weightDelta ? data.weightDelta.toFixed(2) : "0.00",
+                data.sleepTime || 0,
+                data.condition || 7,
+                data.visualScore || 5,
+                data.restingHR || 60,
+                data.workoutPart ? `"${data.workoutPart.replace(/"/g, '""')}"` : '""',
+                data.carbs || 0,
+                data.protein || 0,
+                data.fat || 0,
+                data.totalKcal || 0,
+                data.macroRatio || "0:0:0",
+                data.water || 0,
+                data.anaerobic || 0,
+                data.aerobic || 0,
+                data.bowel || "X",
+                cleanSpecialNote,
+                cleanMemo
+            ];
+            csvContent += row.join(",") + "\n";
+        });
+
+        // 스마트폰 기기별 파일 시스템 권한 감지 및 이중화 저장 위치 지정 엔진 가동
+        const pad = n => n < 10 ? '0' + n : n;
+        const now = new Date();
+        const fileName = `Diet_Weight_Report_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
+
+        try {
+            if (window.showSaveFilePicker) {
+                // [지원 기기]: 사용자가 직접 디렉토리 폴더 위치 및 명칭 지정형 팝업 연동
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: fileName,
+                    types: [{ description: 'Excel CSV Document', accept: { 'text/csv': ['.csv'] } }]
+                });
+                const writable = await handle.createWritable();
+                await writable.write(csvContent);
+                await writable.close();
+                if (typeof window.showToast === 'function') window.showToast("선택하신 모바일 지정 폴더에 안전하게 내보내기 되었습니다.");
+            } else {
+                // [구형/미지원 기기]: 하위 호환성 안심 우회(Fallback) 자동 다운로드 링크 처리
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute("download", fileName);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                if (typeof window.showToast === 'function') window.showToast("기본 다운로드 폴더에 엑셀 백업본이 저장되었습니다.");
+            }
+        } catch (err) {
+            if (typeof window.showToast === 'function') window.showToast("백업 내보내기 처리가 안전하게 취소되었습니다.");
+        } finally {
+            if (loader) loader.classList.add('hidden');
+        }
+    }, 200);
+}
+
+/**
+ * 2. 정규식 가드 기반 엑셀 파일 불러오기 및 무결성 파서 복원 함수
+ * @param {Event} event - 파일 업로드 변경 동적 이벤트 객체
+ */
+export function importWeightRecordsFromCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const loader = document.getElementById('global-loading-layer');
+    if (loader) {
+        document.getElementById('global-loading-text').innerText = "엑셀 패킷 해석 및 20대 건강 변수 병합 분석 중...";
+        loader.classList.remove('hidden'); loader.classList.add('flex');
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            const text = e.target.result;
+            const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+            
+            if (lines.length <= 1) { throw new Error("복원 가능한 지표 행 데이터가 파일 내부에 존재하지 않습니다."); }
+
+            // 1차 가드 절: 헤더 정밀 타이틀 무결성 대조 검사
+            if (!lines[0].includes("일자") || !lines[0].includes("공복체중")) {
+                throw new Error("본 애플리케이션의 규격과 일치하지 않는 손상된 엑셀 서식 파일입니다.");
+            }
+
+            let importSuccessCounter = 0;
+
+            // 두 번째 행(실측 데이터 라인)부터 순회 파싱 집행
+            for (let i = 1; i < lines.length; i++) {
+                // 큰따옴표 내부의 쉼표를 구분 기호에서 예외 처리하는 엑셀 전용 정규식 분할 알고리즘 이식
+                const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.trim());
+                if (row.length < 3) continue;
+
+                let rawDate = row[0].replace(/"/g, '');
+                
+                // [날짜 포맷 정규식 강제 보정 가드]: 2026-6-8 형태를 YYYY-MM-DD(2026-06-08) 규격으로 안전 정렬 패딩
+                const dateMatch = rawDate.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+                if (!dateMatch) continue;
+                
+                const normalizedDateStr = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
+                
+                const weightVal = parseFloat(row[2]) || 0;
+                if (weightVal <= 0) continue; // 필수 실측값 공백 감지 시 데이터 무결성을 위해 생략 가드
+
+                // 단일 진실 공급원 전역 구조 보존 병합 집행 (기존 exercises 훈련 자산은 완벽히 보존)
+                if (!state.workouts[normalizedDateStr]) {
+                    state.workouts[normalizedDateStr] = { weight: 0, bf: 0, smm: 0, exercises: [] };
+                }
+
+                const target = state.workouts[normalizedDateStr];
+                target.weight = weightVal;
+                target.dayOfWeek = row[1].replace(/"/g, '') || "";
+                target.sleepTime = parseFloat(row[4]) || 0;
+                target.condition = parseInt(row[5]) || 7;
+                target.visualScore = parseInt(row[6]) || 5;
+                target.restingHR = parseInt(row[7]) || 60;
+                target.workoutPart = row[8] ? row[8].replace(/"/g, '') : "";
+                target.carbs = parseFloat(row[9]) || 0;
+                target.protein = parseFloat(row[10]) || 0;
+                target.fat = parseFloat(row[11]) || 0;
+                target.totalKcal = parseInt(row[12]) || 0;
+                target.macroRatio = row[13] ? row[13].replace(/"/g, '') : "0:0:0";
+                target.water = parseFloat(row[14]) || 0;
+                target.anaerobic = parseInt(row[15]) || 0;
+                target.aerobic = parseInt(row[16]) || 0;
+                target.bowel = row[17] ? row[17].replace(/"/g, '') : "X";
+                target.specialNote = row[18] ? row[18].replace(/"/g, '') : "";
+                target.memo = row[19] ? row[19].replace(/"/g, '') : "";
+
+                importSuccessCounter++;
+            }
+
+            // 20대 변수 병합이 완료된 직후 연속형 체중 변화량(Δ) 전체 재계산 파이프라인 집행
+            recalculateAllWeightDeltas();
+            
+            // 3중 세이프 보존 동기화 저장 강제 집행
+            saveToLocal();
+            
+            // UI 레이어 화면 뷰 리프레시 동기화 가동
+            renderWeightRecordList();
+            setMatrixFilter(state.weightRecordFilter || 'all');
+
+            if (typeof window.showToast === 'function') {
+                window.showToast(`총 ${importSuccessCounter}개 일자의 하드코어 보디빌딩 지표 복원에 성공했습니다.`);
+            }
+
+        } catch (err) {
+            alert(`엑셀 복원 실패: ${err.message}`);
+        } finally {
+            if (loader) loader.classList.add('hidden');
+            event.target.value = ''; // 동일 파일 재업로드 트리거 보장용 인풋 초기화
+        }
+    };
+    reader.readAsText(file, 'UTF-8');
+}
+
+/**
+ * 3. 스마트폰 모바일 화면 전용 중앙 집중식 레이아웃 반응형 최적화 가드 엔진
+ * 목적: 스크롤 스티키 처리 및 가상 키보드 호출 시 레이아웃 왜곡을 전면 완벽 방어합니다.
+ */
+export function initWeightRecordModule() {
+    // [가드 1]: 스크롤 350px 이상 이동 시 상단 4대 메뉴바 고정 및 튀림 현상 방어 스페이서 연동
+    window.addEventListener('scroll', function() {
+        const menubar = document.getElementById('main-tab-menubar');
+        const spacer = document.getElementById('menu-bar-spacer');
+        if (!menubar || !spacer) return;
+
+        if (window.scrollY > 350) {
+            menubar.classList.add('sticky-menu-fixed', 'px-4', 'pt-2');
+            spacer.classList.remove('relative'); spacer.classList.add('block');
+        } else {
+            menubar.classList.remove('sticky-menu-fixed', 'px-4', 'pt-2');
+            spacer.classList.remove('block'); spacer.classList.add('relative');
+        }
+    });
+
+    // [가드 2]: 모바일 가상 숫자 패드 활성화 시 최하단 고정 영양소 바 오버레이 가림 전면 방어 가드
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', function() {
+            const macroBar = document.getElementById('sticky-macro-bar');
+            if (!macroBar) return;
+            
+            // 키보드가 뷰포트 영역을 침범하여 화면 높이가 축소되었는지 정밀 탐색
+            if (window.visualViewport.height < window.innerHeight * 0.75) {
+                macroBar.classList.add('hidden'); // 입력 패널 개방 중 일시 은닉 처리
+            } else {
+                macroBar.classList.remove('hidden'); // 자판 해제 즉시 복구 노출
+            }
+        });
+    }
+}
