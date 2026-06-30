@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PREP MASTER PRO - Workout Record Hub</title>
+    <title>PREP MASTER PRO - 운동 캘린더 & 타이머</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Pretendard:wght@300;400;500;600;700;800;900&display=swap');
         body { font-family: 'Pretendard', 'Inter', sans-serif; background-color: #090D16; color: #F8FAFC; -webkit-tap-highlight-color: transparent; }
@@ -50,13 +51,13 @@
                 </div>
             </div>
             <div id="timer-controls-default" class="flex gap-2">
-                <button onclick="window.stopRestTimer()" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition-colors">종료</button>
+                <button id="btn-timer-stop" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition-colors">종료</button>
             </div>
             <div id="timer-controls-extend" class="hidden flex-wrap gap-2 justify-center sm:justify-end">
-                <button onclick="window.extendRestTimer(10)" class="px-3 py-2 bg-slate-800 text-amber-400 border border-amber-500/30 rounded-lg font-bold text-sm">+10초</button>
-                <button onclick="window.extendRestTimer(30)" class="px-3 py-2 bg-slate-800 text-amber-400 border border-amber-500/30 rounded-lg font-bold text-sm">+30초</button>
-                <button onclick="window.extendRestTimer(60)" class="px-3 py-2 bg-slate-800 text-amber-400 border border-amber-500/30 rounded-lg font-bold text-sm">+60초</button>
-                <button onclick="window.stopRestTimer()" class="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-lg font-bold text-sm ml-2">정지</button>
+                <button class="action-timer-extend px-3 py-2 bg-slate-800 text-amber-400 border border-amber-500/30 rounded-lg font-bold text-sm" data-timer-delta="10">+10초</button>
+                <button class="action-timer-extend px-3 py-2 bg-slate-800 text-amber-400 border border-amber-500/30 rounded-lg font-bold text-sm" data-timer-delta="30">+30초</button>
+                <button class="action-timer-extend px-3 py-2 bg-slate-800 text-amber-400 border border-amber-500/30 rounded-lg font-bold text-sm" data-timer-delta="60">+60초</button>
+                <button id="btn-timer-stop-extend" class="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-lg font-bold text-sm ml-2">정지</button>
             </div>
         </div>
     </div>
@@ -96,14 +97,14 @@
     </header>
 </div>
 
-<nav class="sticky top-0 left-0 w-full z-50 bg-[#090D16]/95 backdrop-blur-md border-y border-slate-800/80 shadow-lg">
+<nav id="calendar-tab-nav" class="sticky top-0 left-0 w-full z-50 bg-[#090D16]/95 backdrop-blur-md border-y border-slate-800/80 shadow-lg">
     <div class="max-w-7xl mx-auto flex overflow-x-auto no-scrollbar whitespace-nowrap text-sm font-bold text-slate-400">
-        <button onclick="window.switchCalendarTab('tab-home')" id="nav-tab-home" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px] active-tab-bar">홈 대시보드</button>
-        <button onclick="window.switchCalendarTab('tab-record')" id="nav-tab-record" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">기록지</button>
-        <button onclick="window.switchCalendarTab('tab-routine')" id="nav-tab-routine" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">분할루틴</button>
-        <button onclick="window.switchCalendarTab('tab-alarm')" id="nav-tab-alarm" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">수동알람</button>
-        <button onclick="window.switchCalendarTab('tab-stats')" id="nav-tab-stats" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">입체분석</button>
-        <button onclick="window.switchCalendarTab('tab-settings')" id="nav-tab-settings" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">환경설정</button>
+        <button data-calendar-tab="tab-home" id="nav-tab-home" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px] active-tab-bar">홈 대시보드</button>
+        <button data-calendar-tab="tab-record" id="nav-tab-record" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">기록지</button>
+        <button data-calendar-tab="tab-routine" id="nav-tab-routine" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">분할루틴</button>
+        <button data-calendar-tab="tab-alarm" id="nav-tab-alarm" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">수동알람</button>
+        <button data-calendar-tab="tab-stats" id="nav-tab-stats" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">입체분석</button>
+        <button data-calendar-tab="tab-settings" id="nav-tab-settings" class="flex-1 py-4 px-5 text-center transition-all min-w-[75px]">환경설정</button>
     </div>
 </nav>
 
@@ -115,7 +116,7 @@
                 <h3 class="text-lg font-black text-white" id="home-routine-title">실전 루틴 스크리닝 중...</h3>
                 <p class="text-xs text-slate-400 mt-1" id="home-routine-desc">오늘 훈련할 세션을 열어 고강도 점진적 과부하를 적용하십시오.</p>
             </div>
-            <button onclick="window.switchCalendarTab('tab-record')" class="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 text-sm font-black px-6 py-3 rounded-xl transition-all">훈련지 전개</button>
+            <button id="btn-home-go-record" class="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 text-sm font-black px-6 py-3 rounded-xl transition-all">훈련지 전개</button>
         </div>
         <div class="glass-panel p-5 rounded-2xl border border-slate-800">
             <h4 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">★ 자주 기입하는 종목 빠른 마운트</h4>
@@ -127,9 +128,9 @@
         <div class="lg:col-span-5 space-y-4">
             <div class="glass-panel p-4 rounded-2xl border border-slate-800 shadow-xl">
                 <div class="flex justify-between items-center mb-4 px-1">
-                    <button onclick="window.moveMonth(-1)" class="p-2 text-slate-400 hover:text-white transition-colors">◀</button>
+                    <button id="btn-calendar-prev" class="p-2 text-slate-400 hover:text-white transition-colors">◀</button>
                     <h2 id="calendar-month-year" class="text-lg font-black text-slate-200"></h2>
-                    <button onclick="window.moveMonth(1)" class="p-2 text-slate-400 hover:text-white transition-colors">▶</button>
+                    <button id="btn-calendar-next" class="p-2 text-slate-400 hover:text-white transition-colors">▶</button>
                 </div>
                 <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-slate-500 mb-2">
                     <div class="text-rose-500">Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div class="text-sky-500">Sat</div>
@@ -142,7 +143,7 @@
                 <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2">
                     <input type="number" id="plate-calc-target" value="100" class="w-full bg-transparent text-right font-black text-amber-400 text-base outline-none pr-1">
                     <span class="text-xs text-slate-500 font-bold shrink-0">kg</span>
-                    <button onclick="window.runPlateCalculate()" class="bg-amber-500 text-slate-950 text-xs font-black px-3 py-2 rounded-lg shrink-0">연산</button>
+                    <button id="btn-plate-calc" class="bg-amber-500 text-slate-950 text-xs font-black px-3 py-2 rounded-lg shrink-0">연산</button>
                 </div>
                 <div id="plate-calc-result" class="mt-2 text-xs font-bold text-slate-300 bg-slate-900/40 border border-slate-800/80 rounded-xl p-2.5 min-h-[35px] flex items-center justify-center text-center"></div>
             </div>
@@ -157,23 +158,23 @@
                         </h2>
                         <p id="label-total-volume" class="text-[11px] text-slate-400 font-bold mt-1 uppercase">총 훈련 볼륨: 0 kg</p>
                     </div>
-                    <button onclick="window.openLibraryModal()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-[11px] font-black rounded-xl transition-colors shadow-lg">
+                    <button id="btn-open-library" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-[11px] font-black rounded-xl transition-colors shadow-lg">
                         ＋ 종목 사전 선택
                     </button>
                 </div>
                 
                 <div id="workout-list-container" class="space-y-4 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar"></div>
                 
-                <button onclick="window.clearDailyExercises()" class="w-full mt-4 py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/20 text-xs font-black rounded-xl transition-colors shadow-inner flex items-center justify-center gap-1.5">
+                <button id="btn-clear-daily-workout" class="w-full mt-4 py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/20 text-xs font-black rounded-xl transition-colors shadow-inner flex items-center justify-center gap-1.5">
                     ⚠️ 당일 운동 정보 모두 제거 (신체 계측치 제외)
                 </button>
 
                 <div class="mt-4 grid grid-cols-2 gap-3 border-t border-slate-800 pt-4">
-                    <button onclick="window.openSaveRoutineModal()" class="flex flex-col items-center justify-center gap-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors group">
+                    <button id="btn-routine-backup-modal" class="flex flex-col items-center justify-center gap-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors group">
                         <span class="text-lg group-hover:scale-110 transition-transform">📥</span>
                         <span class="text-xs font-bold text-slate-300">현재 일지 루틴 저장</span>
                     </button>
-                    <button onclick="window.openTemplateManager()" class="flex flex-col items-center justify-center gap-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors group">
+                    <button id="btn-template-manager" class="flex flex-col items-center justify-center gap-1 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors group">
                         <span class="text-lg group-hover:scale-110 transition-transform">📂</span>
                         <span class="text-xs font-bold text-slate-300">내 루틴 가져오기</span>
                     </button>
@@ -185,7 +186,7 @@
     <section id="pane-tab-routine" class="calendar-pane space-y-4 hidden animate-fade-in">
         <div class="flex justify-between items-center border-b border-slate-800 pb-3">
             <h2 class="text-xl font-black text-white">📋 분할 루틴 프리셋 프로그램</h2>
-            <button onclick="window.openTemplateManager()" class="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold border border-slate-700">백업 보존실</button>
+            <button id="btn-template-manager-alt" class="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold border border-slate-700">백업 보존실</button>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="routine-preset-grid-box"></div>
     </section>
@@ -218,13 +219,13 @@
                         <span class="text-slate-500 font-bold">초</span>
                     </div>
                 </div>
-                <div class="grid grid-cols-4 gap-2 pt-2">
-                    <button onclick="document.getElementById('manual-timer-sec').value = 30" class="py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700">30초</button>
-                    <button onclick="document.getElementById('manual-timer-sec').value = 60" class="py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700">60초</button>
-                    <button onclick="document.getElementById('manual-timer-sec').value = 90" class="py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700">90초</button>
-                    <button onclick="document.getElementById('manual-timer-sec').value = 120" class="py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700">120초</button>
+                <div class="grid grid-cols-4 gap-2 pt-2" id="manual-timer-quick-box">
+                    <button class="action-set-manual-sec py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700" data-sec="30">30초</button>
+                    <button class="action-set-manual-sec py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700" data-sec="60">60초</button>
+                    <button class="action-set-manual-sec py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700" data-sec="90">90초</button>
+                    <button class="action-set-manual-sec py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-lg border border-slate-700" data-sec="120">120초</button>
                 </div>
-                <button onclick="window.startGlobalAlarm()" class="w-full py-4 mt-4 bg-amber-500 hover:bg-amber-600 text-slate-950 text-base font-black rounded-xl shadow-lg">타이머 즉시 가동</button>
+                <button id="btn-manual-alarm-trigger" class="w-full py-4 mt-4 bg-amber-500 hover:bg-amber-600 text-slate-950 text-base font-black rounded-xl shadow-lg">타이머 즉시 가동</button>
             </div>
         </div>
     </section>
@@ -253,7 +254,7 @@
         <div class="glass-panel p-5 rounded-2xl border border-slate-800">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-sm font-bold text-slate-200">⚖️ 최근 체중 변화 추이</h3>
-                <button onclick="window.exportWorkoutToCSV()" class="text-[10px] px-2.5 py-1.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-md font-bold">CSV 내보내기</button>
+                <button id="btn-export-workout-csv" class="text-[10px] px-2.5 py-1.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-md font-bold">CSV 내보내기</button>
             </div>
             <div class="relative w-full h-[200px] flex justify-center items-center"><canvas id="chart-weight-trend"></canvas></div>
         </div>
@@ -265,17 +266,17 @@
             <div class="space-y-4">
                 <div class="flex justify-between items-center">
                     <label class="text-xs font-bold text-slate-400">기본 휴식 시간 (초)</label>
-                    <input type="number" id="setting-default-rest" value="90" onchange="window.saveSystemSettings()" class="w-20 bg-slate-900 border border-slate-700 rounded-lg p-2 text-center text-sm font-black text-white outline-none">
+                    <input type="number" id="setting-default-rest" value="90" class="w-20 bg-slate-900 border border-slate-700 rounded-lg p-2 text-center text-sm font-black text-white outline-none">
                 </div>
                 <div class="flex justify-between items-center">
                     <label class="text-xs font-bold text-slate-400">전역 기본 알람 톤</label>
-                    <select id="setting-default-sound" onchange="window.saveSystemSettings()" class="w-40 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-bold text-white outline-none">
+                    <select id="setting-default-sound" class="w-40 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-bold text-white outline-none">
                         <option value="1">기본 숏 비프</option><option value="2">마림바 톤</option><option value="3">아르페지오 멜로디</option><option value="4">강력 사이렌</option><option value="5">사인 오실레이터</option>
                     </select>
                 </div>
                 <div class="flex justify-between items-center">
                     <label class="text-xs font-bold text-slate-400">자동반복 간격 주기</label>
-                    <select id="setting-default-interval" onchange="window.saveSystemSettings()" class="w-40 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-bold text-white outline-none">
+                    <select id="setting-default-interval" class="w-40 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-bold text-white outline-none">
                         <option value="500">빠름 (0.5초)</option><option value="800">보통속도 (0.8초)</option><option value="1000">표준주기 (1.0초)</option><option value="1500">여유롭게 (1.5초)</option>
                     </select>
                 </div>
@@ -284,16 +285,16 @@
         <div class="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
             <h3 class="text-sm font-black text-amber-500 uppercase tracking-wider border-b border-slate-800 pb-2">📂 로컬 데이터 인프라 관리</h3>
             <div class="grid grid-cols-2 gap-2">
-                <button onclick="window.triggerSettingExport()" class="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 rounded-xl border border-slate-700">로컬 지정 위치 백업</button>
-                <input type="file" id="setting-import-file" accept=".json" style="display:none;" onchange="window.triggerSettingImport(event)">
-                <button onclick="document.getElementById('setting-import-file').click()" class="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 rounded-xl border border-slate-700">JSON 백업 복원</button>
+                <button id="btn-system-full-export" class="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 rounded-xl border border-slate-700">로컬 지정 위치 백업</button>
+                <input type="file" id="setting-import-file" accept=".json" class="hidden">
+                <button id="btn-setting-import-trigger" class="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 rounded-xl border border-slate-700">JSON 백업 복원</button>
             </div>
-            <button onclick="window.triggerClearAllWorkoutData()" class="w-full py-3 bg-rose-950/20 text-rose-400 border border-rose-900/30 rounded-xl text-xs font-bold mt-4">⚠️ 전체 데이터 영구 초기화</button>
+            <button id="btn-clear-all-data" class="w-full py-3 bg-rose-950/20 text-rose-400 border border-rose-900/30 rounded-xl text-xs font-bold mt-4">⚠️ 전체 데이터 영구 초기화</button>
         </div>
     </section>
 </div>
 
-<button onclick="window.triggerQuickInputFAB()" class="fixed bottom-8 right-6 z-[90] w-14 h-14 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center border-2 border-[#090D16] active:scale-95 transition-transform">
+<button id="fab-quick-input-trigger" class="fixed bottom-8 right-6 z-[90] w-14 h-14 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center border-2 border-[#090D16] active:scale-95 transition-transform">
     <span class="text-slate-950 font-black text-2xl select-none">＋</span>
 </button>
 
@@ -301,12 +302,12 @@
     <div class="glass-panel p-5 sm:p-6 rounded-3xl w-full max-w-lg h-[85vh] max-h-[85vh] flex flex-col border border-sky-500/30 shadow-2xl overflow-hidden animate-fade-in">
         <div class="flex justify-between items-center mb-3 shrink-0">
             <h3 class="text-base font-black text-white">📚 초성 지원 계층형 종목 사전</h3>
-            <button onclick="window.closeLibraryModal()" class="text-slate-400 hover:text-white font-black text-sm px-2 py-1">✕</button>
+            <button id="btn-close-library" class="text-slate-400 hover:text-white font-black text-sm px-2 py-1">✕</button>
         </div>
         
         <div class="bg-slate-900 border border-sky-500/40 rounded-xl p-3 flex items-center gap-2 mb-2 shrink-0">
             <span class="text-slate-500 pl-1">🔍</span>
-            <input type="text" id="library-search-input" oninput="window.runLibrarySearchFilter()" placeholder="초성 및 공백 무시 통합검색" class="w-full bg-transparent text-sm text-white outline-none font-bold">
+            <input type="text" id="library-search-input" placeholder="초성 및 공백 무시 통합검색" class="w-full bg-transparent text-sm text-white outline-none font-bold">
         </div>
 
         <div id="library-fullname-viewer" class="text-xs font-bold text-amber-400 bg-slate-950/90 px-3 py-2.5 rounded-xl border border-slate-800 hidden text-center animate-fade-in shrink-0 mb-2"></div>
@@ -320,7 +321,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="library-frequent-grid"></div>
             </div>
         </div>
-        <button onclick="window.closeLibraryModal()" class="w-full py-3.5 mt-4 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">닫기</button>
+        <button id="btn-close-library-bottom" class="w-full py-3.5 mt-4 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 shrink-0">닫기</button>
     </div>
 </div>
 
@@ -330,17 +331,17 @@
         <input type="hidden" id="rest-timer-ex-idx">
         <label class="block text-xs font-bold text-slate-400 mb-2">휴식 시간 (초)</label>
         <div class="flex items-center justify-center gap-3 bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">
-            <button onclick="window.adjRestTimerSetting(-10)" class="w-10 h-10 bg-slate-800 rounded-lg text-slate-300 font-black text-lg select-none">-</button>
+            <button id="btn-rest-timer-dec" class="w-10 h-10 bg-slate-800 rounded-lg text-slate-300 font-black text-lg select-none" data-delta="-10">-</button>
             <div class="flex items-center gap-1"><input type="number" id="rest-timer-sec-input" class="w-16 bg-transparent text-center text-3xl font-black text-amber-400 outline-none"><span class="text-sm font-bold text-slate-500">초</span></div>
-            <button onclick="window.adjRestTimerSetting(10)" class="w-10 h-10 bg-slate-800 rounded-lg text-slate-300 font-black text-lg select-none">+</button>
+            <button id="btn-rest-timer-inc" class="w-10 h-10 bg-slate-800 rounded-lg text-slate-300 font-black text-lg select-none" data-delta="10">+</button>
         </div>
         <label class="block text-xs font-bold text-slate-400 mb-2">전용 알람음</label>
         <select id="rest-timer-sound-input" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white font-bold outline-none mb-5">
             <option value="1">1. 기본 숏 비프</option><option value="2">2. 아르페지오</option><option value="3">3. 트라이앵글멜로디</option>
         </select>
         <div class="flex gap-2">
-            <button onclick="window.closeRestTimerModal()" class="flex-1 py-3 bg-slate-950 text-slate-400 text-xs font-bold rounded-xl border border-slate-800">취소</button>
-            <button onclick="window.saveRestTimerModal()" class="flex-1 py-3 bg-amber-500 text-slate-950 text-xs font-black rounded-xl">적용</button>
+            <button id="btn-close-rest-modal" class="flex-1 py-3 bg-slate-950 text-slate-400 text-xs font-bold rounded-xl border border-slate-800">취소</button>
+            <button id="btn-save-rest-modal" class="flex-1 py-3 bg-amber-500 text-slate-950 text-xs font-black rounded-xl">적용</button>
         </div>
     </div>
 </div>
@@ -349,7 +350,7 @@
     <div class="glass-panel p-6 rounded-3xl w-full max-w-md animate-fade-in border border-slate-800 shadow-2xl">
         <h3 class="text-base font-black text-white mb-4">📂 내 루틴 프리셋 보관실</h3>
         <div id="template-list-box" class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1 mb-4"></div>
-        <button onclick="window.closeTemplateManager()" class="w-full py-2.5 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-700">닫기</button>
+        <button id="btn-close-template-modal" class="w-full py-2.5 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-700">닫기</button>
     </div>
 </div>
 
@@ -359,8 +360,8 @@
         <p class="text-xs text-slate-400 mb-4">오늘 기록지에 세팅된 운동 순서를 저장합니다.</p>
         <input type="text" id="save-routine-name-input" placeholder="예: 가슴/어깨 루틴 프리셋" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white font-bold outline-none mb-5 focus:border-amber-500">
         <div class="flex gap-2">
-            <button onclick="window.closeSaveRoutineModal()" class="flex-1 py-3 bg-slate-950 text-slate-400 text-xs font-bold rounded-xl border border-slate-800">취소</button>
-            <button onclick="window.confirmSaveRoutine()" class="flex-1 py-3 bg-amber-500 text-slate-950 text-xs font-black rounded-xl">저장하기</button>
+            <button id="btn-close-save-routine-modal" class="flex-1 py-3 bg-slate-950 text-slate-400 text-xs font-bold rounded-xl border border-slate-800">취소</button>
+            <button id="btn-confirm-routine-save" class="flex-1 py-3 bg-amber-500 text-slate-950 text-xs font-black rounded-xl">저장하기</button>
         </div>
     </div>
 </div>
@@ -376,8 +377,8 @@
             </div>
         </div>
         <div class="flex gap-2 mt-5">
-            <button onclick="window.closeQuickInputFABModal()" class="flex-1 py-3 bg-slate-950 text-slate-400 text-xs font-bold rounded-xl border border-slate-800">취소</button>
-            <button onclick="window.saveQuickInputFABModal()" class="flex-1 py-3 bg-amber-500 text-slate-950 text-xs font-black rounded-xl">등록</button>
+            <button id="btn-close-quick-modal" class="flex-1 py-3 bg-slate-950 text-slate-400 text-xs font-bold rounded-xl border border-slate-800">취소</button>
+            <button id="btn-save-quick-modal" class="flex-1 py-3 bg-amber-500 text-slate-950 text-xs font-black rounded-xl">등록</button>
         </div>
     </div>
 </div>
@@ -386,22 +387,22 @@
     <div class="glass-panel p-5 sm:p-6 rounded-3xl w-full max-w-md h-[85vh] max-h-[85vh] flex flex-col border border-amber-500/40 shadow-2xl animate-fade-in overflow-hidden">
         <div class="flex justify-between items-center mb-1 shrink-0">
             <h3 id="routine-editor-popup-title" class="text-base font-black text-amber-500">✏️ 프로그램 독립 편집</h3>
-            <button onclick="window.closeTemplatePopupEditor()" class="text-slate-400 hover:text-white font-black text-sm px-2 py-1">✕</button>
+            <button id="btn-close-popup-editor-top" class="text-slate-400 hover:text-white font-black text-sm px-2 py-1">✕</button>
         </div>
         <p class="text-[10px] text-slate-400 mb-2 shrink-0">편집 중의 정보는 실제 일지 기록을 건드리지 않고 프리셋 구조만 격리 수정 보존합니다.</p>
         
-        <button onclick="window.triggerLibraryAddFromEditor()" class="w-full py-2.5 mb-2 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-500 text-white text-xs font-black rounded-xl transition-all shadow-md shrink-0">
+        <button id="btn-editor-add-exercise-trigger" class="w-full py-2.5 mb-2 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-500 text-white text-xs font-black rounded-xl transition-all shadow-md shrink-0">
             ＋ 이 프로그램에 새 운동 종목 추가하기
         </button>
 
         <div id="routine-editor-list-container" class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 mb-4 bg-slate-950/40 p-2 rounded-xl border border-slate-800/60"></div>
         <div class="flex gap-2 shrink-0 border-t border-slate-800/80 pt-4">
-            <button onclick="window.closeTemplatePopupEditor()" class="flex-1 py-3 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white text-xs font-bold rounded-xl">편집취소</button>
-            <button onclick="window.saveTemplatePopupEditorData()" class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-lg">💾 편집완료 저장</button>
+            <button id="btn-close-popup-editor" class="flex-1 py-3 bg-slate-900 border border-slate-700 text-slate-400 hover:text-white text-xs font-bold rounded-xl">편집취소</button>
+            <button id="btn-save-popup-editor" class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-lg">💾 편집완료 저장</button>
         </div>
     </div>
 </div>
 
-<script type="module" src="calendar.js"></script>
+<script type="module" src="calendarMain.js"></script>
 </body>
 </html>
