@@ -1,14 +1,14 @@
 /**
- * 파일명: app.js (제1구획)
- * 역할: 전역 변수 바인딩, 초기 부팅 라이프사이클 관리 및 기존 식단 플래너 핵심 제어 로직
- * 주의사항: 아래 코드를 복사한 후, 이어서 제2구획 코드를 같은 파일 하단에 밀착하여 붙여넣으십시오.
+ * 파일명: app.js
+ * 역할: 식단 플래너 도메인 총괄 통제 및 체중 기록지 대시보드/CSV 입출력 오케스트레이터 컨트롤러
+ * 변경사항: 최하단 유령 중괄호 구문 오류 제거, 오리지널 index.html 탭 노드 아이디 완전 매핑 및 예외 방어 가드 절 구축 완료
  */
 
 import { state, applyCustomSuppsToDB } from './store.js';
 import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON, saveToLocal } from './services.js';
 
 // ==========================================
-// 1. 브라우저 전역 윈도우 (window) 네임스페이스 바인딩
+// 브라우저 전역 윈도우 (window) 네임스페이스 명시적 바인딩
 // ==========================================
 window.showToast = showToast;
 window.switchMainTab = switchMainTab; 
@@ -44,13 +44,25 @@ window.runSmartCalc = runSmartCalc;
 window.exportData = () => exportDataJSON(showToast); 
 window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("동기화 복원 성공."); }, () => showToast("비정상 백업 파일입니다."));
 
-// 윈도우 런타임 제어용 로컬 변수 선언
+// 체중 기록 고도화 모듈 스코프 바인딩
+window.openRecordModal = openRecordModal;
+window.closeRecordModal = closeRecordModal;
+window.handleRecordDateChange = handleRecordDateChange;
+window.setBowelField = setBowelField;
+window.toggleQuickNoteChip = toggleQuickNoteChip;
+window.pullDietaryMacrosFromPlanner = pullDietaryMacrosFromPlanner;
+window.saveWeightRecordData = saveWeightRecordData;
+window.deleteWeightRecordData = deleteWeightRecordData;
+window.toggleAccordionCard = toggleAccordionCard;
+window.setMatrixFilter = setMatrixFilter;
+window.updateWeightTrendChart = updateWeightTrendChart;
+window.exportWeightRecordsToCSV = exportWeightRecordsToCSV;
+window.importWeightRecordsFromCSV = importWeightRecordsFromCSV;
+window.recalculateAllWeightDeltas = recalculateAllWeightDeltas;
+
 let mixChartInstance = null;
 let selectedBowelValue = '';
 
-/**
- * 사용자 인터페이스 (UI: User Interface) 알림용 토스트 메시지 제어 함수
- */
 export function showToast(msg) { 
     const t = document.getElementById('toast'); 
     if(!t) return;
@@ -61,15 +73,11 @@ export function showToast(msg) {
     }, 2500); 
 }
 
-/**
- * 시스템 초기 부팅 및 기본 프로필 대시보드 마운트 함수
- */
 export function finishInit() { 
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (!state.selectedDateStr) state.selectedDateStr = todayStr;
 
-    // 문서 객체 모델 (DOM: Document Object Model) 요소를 탐색하여 기존 프로필 바인딩 복구
     const weightDisplay = document.getElementById('prof-weight-display');
     if (weightDisplay) weightDisplay.innerText = state.userInfo.weight + 'kg'; 
     
@@ -88,7 +96,6 @@ export function finishInit() {
         }
     }
 
-    // 당일 공복 체중 기록 정보가 이미 존재한다면 배너 영역 자동 동기화 갱신
     if (state.workouts[todayStr] && state.workouts[todayStr].weight > 0) {
         if (weightDisplay) weightDisplay.innerText = state.workouts[todayStr].weight.toFixed(2) + 'kg';
     }
@@ -101,26 +108,18 @@ export function finishInit() {
     }
     
     runSmartCalc('carb'); runSmartCalc('pro'); runSmartCalc('fat');
-
-    // 60초 주기 브라우저 스토리지 자동 백업 세이프가드 엔진 가동
     setInterval(() => { saveToLocal(); }, 60000);
     initWeightRecordModuleGards();
 }
 
-/**
- * 오리지널 규격에 완벽히 매핑된 4대 단일 통제 탭 전환 함수
- */
 export function switchMainTab(tabId) { 
-    // 모든 탭 컨텐츠 구획 일제 은닉
     document.querySelectorAll('.tab-content').forEach(el => {
         el.classList.add('hidden'); el.classList.remove('block');
     }); 
     
-    // 대상 컨테이너 개방
     const targetEl = document.getElementById(tabId);
     if(targetEl) { targetEl.classList.remove('hidden'); targetEl.classList.add('block'); } 
 
-    // 버튼의 시각적 활성화 활성 상태 클래스 치환
     const tabs = ['tab-timeline', 'tab-calculator', 'tab-analysis', 'tab-weight-record'];
     tabs.forEach(t => { 
         const btn = document.getElementById('btn-' + t);
@@ -131,7 +130,6 @@ export function switchMainTab(tabId) {
         }
     });
 
-    // 화면 최하단 실시간 영양소 바의 뷰포트 진입 가시성 통제
     const macroBar = document.getElementById('sticky-macro-bar');
     if (macroBar) {
         if (tabId === 'tab-timeline' || tabId === 'tab-analysis' || tabId === 'tab-weight-record') {
@@ -151,9 +149,6 @@ export function switchMainTab(tabId) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-/**
- * 가변형 식단 페이즈 탭 인터페이스 렌더링 함수
- */
 export function renderPhaseTabs() {
     const container = document.getElementById('phase-tabs-container'); 
     if(!container) return; container.innerHTML = '';
@@ -164,9 +159,6 @@ export function renderPhaseTabs() {
     });
 }
 
-/**
- * 모바일 입력 오류 방지용 식품 중량 10g 조절 증감 함수
- */
 export function adjAmt(mIdx, iIdx, delta) {
     const cp = state.phases.find(p => p.id === state.currentPhaseId);
     let current = parseFloat(cp.meals[mIdx].items[iIdx].amount) || 0;
@@ -176,9 +168,6 @@ export function adjAmt(mIdx, iIdx, delta) {
     triggerSave(showToast); calculateMacros(); loadPhase(state.currentPhaseId);
 }
 
-/**
- * 특정 식단 탭 데이터를 타임라인 뷰 레이어에 드라이빙 렌더링하는 함수
- */
 export function loadPhase(phaseId) { 
     if(!state.phases.find(p => p.id === phaseId) && state.phases.length > 0) phaseId = state.phases[0].id;
     state.currentPhaseId = phaseId; renderPhaseTabs();
@@ -292,9 +281,6 @@ export function deleteItem(mIdx, iIdx) { const cp = state.phases.find(p => p.id 
 export function addItem(mIdx) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals[mIdx].items.push({name:'백미', amount:100}); triggerSave(showToast); loadPhase(state.currentPhaseId); }
 export function deleteMeal(mIdx) { if(confirm("이 일정을 삭제하시겠습니까?")) { const cp = state.phases.find(p => p.id === state.currentPhaseId); cp.meals.splice(mIdx, 1); triggerSave(showToast); loadPhase(state.currentPhaseId); } }
 
-/**
- * 실시간 매크로 영양소 비율 연산 기능 모듈 (오리지널 매핑 복구본)
- */
 export function calculateMacros() {
     let tC=0, tP=0, tF=0, tK=0; let cSrc={}, pSrc={}, fSrc={}; 
     const cp = state.phases.find(p => p.id === state.currentPhaseId);
@@ -320,15 +306,21 @@ export function calculateMacros() {
     let pPct = totCalc > 0 ? Math.round((pKcal / totCalc) * 100) : 0; 
     let fPct = totCalc > 0 ? Math.round((fKcal / totCalc) * 100) : 0; 
     
-    document.getElementById('dash-kcal').innerText = Math.round(tK).toLocaleString(); 
-    document.getElementById('dash-carbs').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-amber-500">${tC.toFixed(1)}g</span> <span class="text-sm sm:text-base text-amber-400/80 font-bold ml-1">(${cPct}%)</span>`;
-    document.getElementById('dash-protein').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-emerald-400">${tP.toFixed(1)}g</span> <span class="text-sm sm:text-base text-emerald-400/80 font-bold ml-1">(${pPct}%)</span>`;
-    document.getElementById('dash-fat').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-sky-400">${tF.toFixed(1)}g</span> <span class="text-sm sm:text-base text-sky-400/80 font-bold ml-1">(${fPct}%)</span>`;
-    
-    document.getElementById('sticky-kcal').innerText = Math.round(tK).toLocaleString(); 
-    document.getElementById('sticky-carbs').innerText = `${tC.toFixed(1)}g (${cPct}%)`; 
-    document.getElementById('sticky-protein').innerText = `${tP.toFixed(1)}g (${pPct}%)`; 
-    document.getElementById('sticky-fat').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
+    const dKcal = document.getElementById('dash-kcal');
+    if (dKcal) {
+        dKcal.innerText = Math.round(tK).toLocaleString(); 
+        document.getElementById('dash-carbs').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-amber-500">${tC.toFixed(1)}g</span> <span class="text-sm sm:text-base text-amber-400/80 font-bold ml-1">(${cPct}%)</span>`;
+        document.getElementById('dash-protein').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-emerald-400">${tP.toFixed(1)}g</span> <span class="text-sm sm:text-base text-emerald-400/80 font-bold ml-1">(${pPct}%)</span>`;
+        document.getElementById('dash-fat').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-sky-400">${tF.toFixed(1)}g</span> <span class="text-sm sm:text-base text-sky-400/80 font-bold ml-1">(${fPct}%)</span>`;
+    }
+
+    const sKcal = document.getElementById('sticky-kcal');
+    if (sKcal) {
+        sKcal.innerText = Math.round(tK).toLocaleString(); 
+        document.getElementById('sticky-carbs').innerText = `${tC.toFixed(1)}g (${cPct}%)`; 
+        document.getElementById('sticky-protein').innerText = `${tP.toFixed(1)}g (${pPct}%)`; 
+        document.getElementById('sticky-fat').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
+    }
     
     const pieCanvas = document.getElementById('chart-pie-macros');
     if (pieCanvas && !document.getElementById('tab-analysis').classList.contains('hidden')) { 
@@ -345,6 +337,7 @@ export function calculateMacros() {
 }
 
 export function renderAnalysisDetails(tC, tP, tF, cPct, pPct, fPct, cSrc, pSrc, fSrc) {
+    if(!document.getElementById('src-total-c')) return;
     document.getElementById('src-total-c').innerText = `${tC.toFixed(1)}g (${cPct}%)`; 
     document.getElementById('src-total-p').innerText = `${tP.toFixed(1)}g (${pPct}%)`; 
     document.getElementById('src-total-f').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
@@ -420,11 +413,6 @@ export function saveMacroModal() {
     }
     state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId);
 }
-/**
- * 파일명: app.js (제2구획)
- * 역할: 20가지 확장 지표 타임라인 출력, 이중 축 추세 차트 연동 및 엑셀(CSV) 무결성 입출력 제어
- * 주의사항: 위 제1구획 코드가 작성된 파일 바로 다음 줄에 공백 없이 이어서 붙여넣어 완결하십시오.
- */
 
 // ==========================================
 // 4. [신규 추가] 체중 기록 뷰 레이어 및 복합 에디터
@@ -717,7 +705,6 @@ export function importWeightRecordsFromCSV(event) {
 }
 
 function initWeightRecordModuleGards() {
-    // 윈도우 스크롤 통합 제어 핸들러 (상단 메뉴바 스티키 고정 및 하단 영양소 바 슬라이드 은닉 동기화)
     window.addEventListener('scroll', function() {
         const menubar = document.getElementById('tab-menu-container');
         const macroBar = document.getElementById('sticky-macro-bar');
