@@ -985,19 +985,25 @@ export function initCalendarModule() {
 
 function initMetricsChangeEvents() {
     const updateMetricsData = () => {
-        const dStr = state.selectedDateStr; if (!dStr) return; //
-        state.workouts[dStr].weight = parseFloat(document.getElementById('input-daily-weight').value) || 0; //
-        state.workouts[dStr].bf = parseFloat(document.getElementById('input-daily-bf').value) || 0; //
-        state.workouts[dStr].smm = parseFloat(document.getElementById('input-daily-smm').value) || 0; //
-        triggerSave(showToast); renderCalendarGrid(); //
+        const dStr = state.selectedDateStr; if (!dStr) return;
+        state.workouts[dStr].weight = parseFloat(document.getElementById('input-daily-weight').value) || 0;
+        state.workouts[dStr].bf = parseFloat(document.getElementById('input-daily-bf').value) || 0;
+        state.workouts[dStr].smm = parseFloat(document.getElementById('input-daily-smm').value) || 0;
+        
+        // [누락 보완] 캘린더에서 체중 변경 시 식단 기록지의 체중 변화량(Δ) 자동 계산 동기화 호출
+        if (window.recalculateAllWeightDeltas) {
+            window.recalculateAllWeightDeltas();
+        }
+        
+        triggerSave(window.showToast); renderCalendarGrid();
     };
-    const weightEl = document.getElementById('input-daily-weight'); //
-    const bfEl = document.getElementById('input-daily-bf'); //
-    const smmEl = document.getElementById('input-daily-smm'); //
+    const weightEl = document.getElementById('input-daily-weight');
+    const bfEl = document.getElementById('input-daily-bf');
+    const smmEl = document.getElementById('input-daily-smm');
 
-    if (weightEl) weightEl.oninput = updateMetricsData; //
-    if (bfEl) bfEl.oninput = updateMetricsData; //
-    if (smmEl) smmEl.oninput = updateMetricsData; //
+    if (weightEl) weightEl.oninput = updateMetricsData;
+    if (bfEl) bfEl.oninput = updateMetricsData;
+    if (smmEl) smmEl.oninput = updateMetricsData;
 }
 
 // 오프라인 인프라 가동 확인 후 안전 부팅 집행
