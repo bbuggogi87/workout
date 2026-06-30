@@ -38,21 +38,24 @@
         </div>
     </header>
 
-    <section class="w-full bg-gradient-to-b from-slate-900/40 to-transparent pt-6 px-4">
-        <div class="max-w-4xl mx-auto glass-panel rounded-2xl p-4 flex justify-between items-center gap-4">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-lg">🏆</div>
-                <div>
-                    <h2 class="text-xs text-slate-400 font-bold">내추럴 클래식 피지크 대회 모드</h2>
-                    <p class="text-sm font-black text-white mt-0.5">D-18 (목표 체지방률: 4.0%)</p>
-                </div>
-            </div>
-            <div class="text-right shrink-0">
-                <span class="text-[10px] uppercase font-black tracking-widest text-slate-500 block">BASE WEIGHT</span>
-                <span id="prof-weight-display" class="text-base font-black text-amber-400" onclick="window.openProfileModal()">--kg</span>
+<section class="w-full bg-gradient-to-b from-slate-900/40 to-transparent pt-6 px-4">
+    <div class="max-w-4xl mx-auto glass-panel rounded-2xl p-4 flex justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-lg">🏆</div>
+            <div>
+                <h2 class="text-xs text-slate-400 font-bold">내추럴 클래식 피지크 대회 모드</h2>
+                <p class="text-sm font-black text-white mt-0.5">
+                    <span id="badge-target-date">목표일 미정</span> (목표 체지방률: <span id="prof-bf-display">4.0%</span>)
+                </p>
             </div>
         </div>
-    </section>
+        <div class="text-right shrink-0">
+            <span class="text-[10px] uppercase font-black tracking-widest text-slate-500 block">BASE WEIGHT</span>
+            <span id="prof-weight-display" class="text-base font-black text-amber-400" onclick="window.openProfileModal()">--kg</span>
+        </div>
+        <span id="prof-height-display" class="hidden"></span>
+    </div>
+</section>
 
     <div id="menu-bar-spacer" class="w-full h-14 relative mt-4 px-4">
         <nav id="main-tab-menubar" class="max-w-4xl mx-auto flex border-b border-slate-800 bg-slate-950/60 rounded-xl overflow-hidden shadow-inner">
