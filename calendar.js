@@ -1002,7 +1002,6 @@ function initMetricsChangeEvents() {
     if (smmEl) smmEl.oninput = updateMetricsData;
 }
 
-// 오프라인 인프라 가동 확인 후 안전 부팅 집행
 initializeFirebase((success) => {
     const statusEl = document.getElementById('cloud-status-workout');
     if (statusEl) { statusEl.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10B981]"></span> LOCAL TRAINER ACTIVE'; }
