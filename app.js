@@ -414,6 +414,19 @@ export function saveMacroModal() {
     state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId);
 }
 
+/**
+ * [신규 추가] 건강 지표 대시보드 일자별 아코디언 카드 펼침/접힘 토글 함수
+ * (window.toggleAccordionCard 바인딩만 존재하고 본체가 누락되어 ReferenceError 로
+ *  app.js 모듈 전체가 구동 직후 정지하던 치명적 결함을 해결합니다.)
+ */
+export function toggleAccordionCard(dateStr) {
+    const details = document.getElementById(`details-${dateStr}`);
+    const arrow = document.getElementById(`arrow-${dateStr}`);
+    if (!details) return;
+    details.classList.toggle('hidden');
+    if (arrow) arrow.style.transform = details.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
 export function renderWeightRecordList() {
     const container = document.getElementById('weight-records-timeline-container');
     if (!container) return; container.innerHTML = '';

@@ -8,6 +8,42 @@ import { state, applyCustomSuppsToDB } from './store.js'; //
 
 let saveTimeout = null; //
 
+/**
+ * [신규 추가] 현재 전역 상태를 사용자 지정 위치로 내보내는 JSON 백업 파일 생성 함수
+ * (app.js 의 window.exportData 바인딩이 본 함수를 호출하므로, 누락 시 ES 모듈 임포트 자체가 실패하여
+ *  index.html 전체가 구동 불능 상태에 빠지는 치명적 결함을 일으킵니다.)
+ */
+export function exportDataJSON(showToastCallback) {
+    const backupPayload = {
+        phases: state.phases, //
+        customSupps: state.customSupps, //
+        userInfo: state.userInfo, //
+        workouts: state.workouts, //
+        templates: state.templates //
+    };
+    const jsonStr = JSON.stringify(backupPayload, null, 2);
+    const pad = n => n < 10 ? '0' + n : n;
+    const now = new Date();
+    const fileName = `PrepMasterPro_Backup_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}.json`;
+    try {
+        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        if (typeof showToastCallback === 'function') {
+            showToastCallback("백업 파일이 다운로드 폴더에 저장되었습니다.");
+        }
+    } catch (e) {
+        console.error("백업 파일 생성 실패:", e);
+        if (typeof showToastCallback === 'function') {
+            showToastCallback("백업 파일 생성에 실패하였습니다.");
+        }
+    }
+}
+
 // 브라우저 전역 윈도우 (window) 네임스페이스 바인딩
 window.handleNavigationWithSave = handleNavigationWithSave;
 

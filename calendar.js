@@ -231,6 +231,50 @@ function startTimerLogic(seconds, soundType) {
     }, 1000);
 }
 
+/**
+ * [신규 추가] 종목 전용 휴식 알람 세팅 모달 4종 함수
+ * (window 바인딩만 존재하고 본체가 누락되어 ReferenceError 로 calendar.js 모듈 전체가
+ *  구동 직후 정지하던 치명적 결함을 해결합니다. calendar.html 의 #rest-timer-modal 마크업과 결합됩니다.)
+ */
+export function openRestTimerModal(exIdx) {
+    const data = getWorkoutData();
+    const ex = data.exercises[exIdx]; if (!ex) return;
+    const modal = document.getElementById('rest-timer-modal'); if (!modal) return;
+
+    document.getElementById('rest-timer-ex-idx').value = exIdx;
+    document.getElementById('rest-timer-sec-input').value = ex.restTime || state.userInfo?.defaultRestTime || 90;
+    document.getElementById('rest-timer-sound-input').value = ex.alarmSound || state.userInfo?.defaultAlarmSound || '1';
+
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+
+export function closeRestTimerModal() {
+    const modal = document.getElementById('rest-timer-modal'); if (!modal) return;
+    modal.classList.add('hidden'); modal.classList.remove('flex');
+}
+
+export function adjRestTimerSetting(delta) {
+    const input = document.getElementById('rest-timer-sec-input'); if (!input) return;
+    let val = (parseInt(input.value) || 0) + delta;
+    if (val < 0) val = 0;
+    input.value = val;
+}
+
+export function saveRestTimerModal() {
+    const idxInput = document.getElementById('rest-timer-ex-idx'); if (!idxInput) return;
+    const exIdx = parseInt(idxInput.value);
+    const data = getWorkoutData();
+    const ex = data.exercises[exIdx]; if (!ex) return;
+
+    ex.restTime = parseInt(document.getElementById('rest-timer-sec-input').value) || 90;
+    ex.alarmSound = document.getElementById('rest-timer-sound-input').value || '1';
+
+    closeRestTimerModal();
+    triggerSave(showToast);
+    renderWorkoutList();
+    showToast("종목 전용 휴식 알람이 저장되었습니다.");
+}
+
 export function startGlobalAlarm() {
     const sec = parseInt(document.getElementById('manual-timer-sec').value) || 60;
     const soundType = document.getElementById('alarm-sound-select').value || '1';
