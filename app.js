@@ -60,8 +60,13 @@ window.exportWeightRecordsToCSV = exportWeightRecordsToCSV;
 window.importWeightRecordsFromCSV = importWeightRecordsFromCSV;
 window.recalculateAllWeightDeltas = recalculateAllWeightDeltas;
 
+// [신규 추가] 하단 매크로 정보 바 닫기/하단고정 기능 전역 바인딩
+window.closeMacroBar = closeMacroBar;
+window.showMacroBar = showMacroBar;
+
 let mixChartInstance = null;
 let selectedBowelValue = '';
+let macroBarManuallyHidden = false; // [신규 추가] 사용자가 하단 매크로 바를 직접 닫았는지 여부 (닫은 경우 탭 전환/스크롤과 무관하게 숨김 유지)
 
 export function showToast(msg) { 
     const t = document.getElementById('toast'); 
@@ -107,9 +112,59 @@ export function finishInit() {
         loadPhase(state.phases[0].id); 
     }
     
+    // [신규 추가] 이전 세션에서 사용자가 하단 매크로 바를 닫아둔 상태였는지 복원 후, 초기 표시 상태를 동기화
+    try { macroBarManuallyHidden = localStorage.getItem('pmp_macrobar_hidden') === '1'; } catch (e) { macroBarManuallyHidden = false; }
+    applyMacroBarVisibility();
+
     runSmartCalc('carb'); runSmartCalc('pro'); runSmartCalc('fat');
     setInterval(() => { saveToLocal(); }, 60000);
     initWeightRecordModuleGards();
+}
+
+/**
+ * [신규 추가] 하단 매크로 정보 바 및 상단 '하단고정' 버튼의 표시 상태를 일괄 동기화하는 함수
+ * - 식단 플래너 / 입체분석 / 체중기록 탭에서만 노출 대상이 되며, 사용자가 ✕ 버튼으로 직접 닫은 경우에는
+ *   탭을 전환하거나 스크롤을 하더라도 다시 자동으로 뜨지 않고, 상단 '하단고정' 버튼을 눌렀을 때만 복귀합니다.
+ */
+function applyMacroBarVisibility() {
+    const macroBar = document.getElementById('sticky-macro-bar');
+    const pinBtn = document.getElementById('btn-pin-macro-bar');
+    if (!macroBar) return;
+
+    const relevantTabs = ['tab-timeline', 'tab-analysis', 'tab-weight-record'];
+    const isRelevantTab = relevantTabs.some(t => document.getElementById(t)?.classList.contains('block'));
+    const shouldShow = isRelevantTab && !macroBarManuallyHidden;
+
+    if (shouldShow) {
+        macroBar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
+        macroBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+    } else {
+        macroBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+        macroBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+    }
+
+    if (pinBtn) {
+        if (macroBarManuallyHidden) {
+            pinBtn.innerHTML = '📌 하단고정';
+            pinBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/50 border border-slate-700 text-slate-400 text-[11px] sm:text-xs font-bold rounded-lg transition-all active:scale-95 hover:text-white";
+        } else {
+            pinBtn.innerHTML = '📌 고정됨 ✓';
+            pinBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-sky-600/20 border border-sky-500/40 text-sky-400 text-[11px] sm:text-xs font-bold rounded-lg transition-all active:scale-95";
+        }
+    }
+}
+
+export function closeMacroBar() {
+    macroBarManuallyHidden = true;
+    try { localStorage.setItem('pmp_macrobar_hidden', '1'); } catch (e) {}
+    applyMacroBarVisibility();
+}
+
+export function showMacroBar() {
+    macroBarManuallyHidden = false;
+    try { localStorage.setItem('pmp_macrobar_hidden', '0'); } catch (e) {}
+    applyMacroBarVisibility();
+    showToast("하단 매크로 정보 바가 고정되었습니다.");
 }
 
 export function switchMainTab(tabId) { 
@@ -120,26 +175,13 @@ export function switchMainTab(tabId) {
     const targetEl = document.getElementById(tabId);
     if(targetEl) { targetEl.classList.remove('hidden'); targetEl.classList.add('block'); } 
 
-    const tabs = ['tab-timeline', 'tab-calculator', 'tab-analysis', 'tab-weight-record'];
-    tabs.forEach(t => { 
-        const btn = document.getElementById('btn-' + t);
-        if(btn) {
-            btn.className = (t === tabId) 
-                ? "px-5 py-3 rounded-xl text-base font-bold active-tab shrink-0" 
-                : "px-5 py-3 rounded-xl text-base font-bold border border-slate-800 text-slate-400 hover:text-white shrink-0"; 
-        }
+    // [개선] 상단 인라인 메뉴바와 스크롤 시 노출되는 플로팅 메뉴바의 활성 탭 상태를 data-tab-btn 속성 기준으로 동시 동기화
+    document.querySelectorAll('[data-tab-btn]').forEach(btn => {
+        if (btn.dataset.tabBtn === tabId) btn.classList.add('active-tab');
+        else btn.classList.remove('active-tab');
     });
 
-    const macroBar = document.getElementById('sticky-macro-bar');
-    if (macroBar) {
-        if (tabId === 'tab-timeline' || tabId === 'tab-analysis' || tabId === 'tab-weight-record') {
-            macroBar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
-            macroBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
-        } else {
-            macroBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
-            macroBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
-        }
-    }
+    applyMacroBarVisibility();
     
     if(tabId === 'tab-analysis') calculateMacros();
     if(tabId === 'tab-weight-record') {
@@ -714,27 +756,31 @@ export function importWeightRecordsFromCSV(event) {
 }
 
 function initWeightRecordModuleGards() {
+    const menubar = document.getElementById('tab-menu-container');
+    const floatBar = document.getElementById('floating-menu-bar');
+    const scrollTopBtn = document.getElementById('scroll-to-top-btn');
+
+    // [개선] 메뉴바가 화면 밖으로 스크롤되어 사라지는 지점을 기준으로 플로팅 메뉴바를 자연스럽게(트랜지션과 함께) 노출
     window.addEventListener('scroll', function() {
-        const menubar = document.getElementById('tab-menu-container');
-        const macroBar = document.getElementById('sticky-macro-bar');
-        
-        if (menubar) {
-            if (window.scrollY > 350) menubar.classList.add('sticky-menu-fixed');
-            else menubar.classList.remove('sticky-menu-fixed');
+        if (floatBar && menubar) {
+            const triggerY = menubar.offsetTop + menubar.offsetHeight;
+            if (window.scrollY > triggerY) {
+                floatBar.classList.remove('-translate-y-full', 'opacity-0', 'pointer-events-none');
+                floatBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+            } else {
+                floatBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+                floatBar.classList.add('-translate-y-full', 'opacity-0', 'pointer-events-none');
+            }
         }
-        
-        // [보완 완료] 타임라인 데이터 리셋 동기화 중 발생할 수 있는 null 에러 예외 방어 가드 수립
-        if (macroBar && document.getElementById('tab-timeline') && document.getElementById('tab-analysis') && document.getElementById('tab-weight-record')) {
-            if (document.getElementById('tab-timeline').classList.contains('block') || 
-                document.getElementById('tab-analysis').classList.contains('hidden') === false || 
-                document.getElementById('tab-weight-record').classList.contains('block')) {
-                if (window.scrollY > 350) {
-                    macroBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
-                    macroBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
-                } else {
-                    macroBar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
-                    macroBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
-                }
+
+        // [신규 추가] 일정 스크롤 이상 내려갔을 때 '맨 위로' 버튼 노출
+        if (scrollTopBtn) {
+            if (window.scrollY > 400) {
+                scrollTopBtn.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+                scrollTopBtn.classList.add('opacity-100', 'translate-y-0', 'pointer-events-auto');
+            } else {
+                scrollTopBtn.classList.remove('opacity-100', 'translate-y-0', 'pointer-events-auto');
+                scrollTopBtn.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
             }
         }
     });
