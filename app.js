@@ -734,7 +734,6 @@ function initWeightRecordModuleGards() {
     }
 }
 
-// 7. 시스템 초기 부팅 시퀀스 레일 최종 가동 
 initializeFirebase((success) => {
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10B981]"></span> LOCAL AUTOSAVE ACTIVE';
