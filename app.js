@@ -42,9 +42,9 @@ window.addCustomSuppForm = addCustomSuppForm;
 window.removeCustomSupp = removeCustomSupp; 
 window.runSmartCalc = runSmartCalc;
 window.exportData = () => exportDataJSON(showToast); 
-window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("동기화 복원 성공."); }, () => showToast("비정상 백업 파일입니다."));
+window.importData = (e) => importDataJSON(e.target.files[0], () => { finishInit(); showToast("동기화 복원 성공합니다."); }, () => showToast("비정상 백업 파일입니다."));
 
-// 체중 기록 고도화 모듈 스코프 바인딩
+// 체중 기록 고도화 모듈 전역 스코프 바인딩 명세
 window.openRecordModal = openRecordModal;
 window.closeRecordModal = closeRecordModal;
 window.handleRecordDateChange = handleRecordDateChange;
@@ -227,7 +227,7 @@ export function loadPhase(phaseId) {
                 </div>
                 <div class="transition-all duration-300 overflow-hidden ${meal.isCollapsed ? 'max-h-0 opacity-0 m-0' : 'max-h-[3000px] opacity-100 mt-5'}">
                     <div class="flex items-center gap-2 mb-3 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60" onclick="event.stopPropagation()">
-                        <input type="checkbox" id="meal-workout-check-${mIdx}" ${workoutChecked} onchange="window.toggleMealWorkout(${mIdx}, event.target.checked)" class="w-4 h-4 accent-rose-500 cursor-pointer shrink-0">
+                        <input type="checkbox" id="meal-workout-check-${mIdx}" ${workoutChecked} onchange="window.toggleMealWorkout(${mIdx}, event.target.checked)" class="w-4 h-4 accent-rose-500 공식 커서 픽커 쉐입">
                         <label for="meal-workout-check-${mIdx}" class="text-xs font-bold text-slate-400 cursor-pointer select-none">이 일정은 훈련 스케줄입니다 (활성화 시 당일 영양소 연산 대상에서 제외)</label>
                     </div>
                     <input type="text" onchange="window.updateMealField(${mIdx}, 'explain', event.target.value)" value="${meal.explain || ''}" placeholder="스케줄 메모 (예: 오후 메인 본 운동 세션)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-sm sm:text-base text-white font-bold outline-none focus:border-sky-500 mb-3">
@@ -314,12 +314,12 @@ export function calculateMacros() {
         document.getElementById('dash-fat').innerHTML = `<span class="text-3xl sm:text-4xl font-black text-sky-400">${tF.toFixed(1)}g</span> <span class="text-sm sm:text-base text-sky-400/80 font-bold ml-1">(${fPct}%)</span>`;
     }
 
-    const sKcal = document.getElementById('sticky-kcal');
+    const sKcal = document.getElementById('sticky-macro-bar');
     if (sKcal) {
-        sKcal.innerText = Math.round(tK).toLocaleString(); 
-        document.getElementById('sticky-carbs').innerText = `${tC.toFixed(1)}g (${cPct}%)`; 
-        document.getElementById('sticky-protein').innerText = `${tP.toFixed(1)}g (${pPct}%)`; 
-        document.getElementById('sticky-fat').innerText = `${tF.toFixed(1)}g (${fPct}%)`;
+        const sk = document.getElementById('sticky-kcal'); if(sk) sk.innerText = Math.round(tK).toLocaleString(); 
+        const sc = document.getElementById('sticky-carbs'); if(sc) sc.innerText = `${tC.toFixed(1)}g (${cPct}%)`; 
+        const sp = document.getElementById('sticky-protein'); if(sp) sp.innerText = `${tP.toFixed(1)}g (${pPct}%)`; 
+        const sf = document.getElementById('sticky-fat'); if(sf) sf.innerText = `${tF.toFixed(1)}g (${fPct}%)`;
     }
     
     const pieCanvas = document.getElementById('chart-pie-macros');
@@ -364,7 +364,7 @@ export function initCalcDropdowns() {
 export function runSmartCalc(type) {
     const drop = document.getElementById(`calc-${type}-src`); if(!drop || !drop.value) return;
     let src = drop.value; let amt = parseFloat(document.getElementById(`calc-${type}-amt`).value) || 0; let targetMacro = 0; let resHtml = '';
-    if(!state.foodDB[src]) return;
+    if(!state.foodDB[src]) return; // 안전 방어 절 주입
     if(type === 'carb') { 
         targetMacro = amt * state.foodDB[src].c; 
         state.foodCategories['탄수화물'].forEach(f => { if(f !== src && state.foodDB[f].c > 0) { resHtml += `<div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0 text-base"><span class="text-slate-400">${f}</span><span class="text-white font-bold">${Math.round(targetMacro/state.foodDB[f].c)}g</span></div>`; } }); 
@@ -414,9 +414,6 @@ export function saveMacroModal() {
     state.customSupps = updatedSupps; applyCustomSuppsToDB(); closeMacroModal(); triggerSave(showToast); loadPhase(state.currentPhaseId);
 }
 
-// ==========================================
-// 4. [신규 추가] 체중 기록 뷰 레이어 및 복합 에디터
-// ==========================================
 export function renderWeightRecordList() {
     const container = document.getElementById('weight-records-timeline-container');
     if (!container) return; container.innerHTML = '';
@@ -571,24 +568,26 @@ export function recalculateAllWeightDeltas() {
     dates.forEach((dateStr, idx) => { if (idx === 0) state.workouts[dateStr].weightDelta = 0.0; else state.workouts[dateStr].weightDelta = state.workouts[dateStr].weight - state.workouts[dates[idx - 1]].weight; });
 }
 
-// ==========================================
-// 5. [신규 추가] 매트릭스 필터 및 다중 축 혼합 차트 시스템
-// ==========================================
 export function setMatrixFilter(filterType) {
     state.weightRecordFilter = filterType;
     const chips = ['all', 'weight', 'macros', 'condition'];
     chips.forEach(c => { const btn = document.getElementById('chip-filter-' + c); if (btn) btn.className = (c === filterType) ? "px-4 py-2 text-xs font-black rounded-xl bg-sky-500 text-white transition-all shadow-md matrix-chip-active" : "px-4 py-2 text-xs font-bold rounded-xl bg-slate-900 border border-slate-800 text-slate-400 transition-all"; });
     const cWeight = document.getElementById('kpi-card-weight'); const cMacros = document.getElementById('kpi-card-macros'); const cCond = document.getElementById('kpi-card-condition');
-    [cWeight, cMacros, cCond].forEach(card => { if (card) card.className = "glass-panel p-5 rounded-2xl border border-slate-800 transition-all duration-300 opacity-100 scale-100"; }); if (cCond) cCond.className += " col-span-2";
+    
+    // [보완 완료] classList 개별 조작 가드로 replace 무력화 버그 완벽 수정
+    if(cWeight) { cWeight.className = "glass-panel p-5 rounded-2xl transition-all duration-300 opacity-100 scale-100 border border-slate-800"; }
+    if(cMacros) { cMacros.className = "glass-panel p-5 rounded-2xl transition-all duration-300 opacity-100 scale-100 border border-slate-800"; }
+    if(cCond) { cCond.className = "glass-panel p-5 rounded-2xl transition-all duration-300 opacity-100 scale-100 border border-slate-800 col-span-2"; }
+    
     if (filterType === 'weight') {
         if (cMacros) cMacros.className += " opacity-25 scale-95"; if (cCond) cCond.className += " opacity-25 scale-95";
-        if (cWeight) cWeight.className = cWeight.className.replace('border-slate-800', 'border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.2)] scale-[1.02]');
+        if (cWeight) { cWeight.classList.remove('border-slate-800'); cWeight.classList.add('border-sky-500', 'shadow-[0_0_15px_rgba(14,165,233,0.2)]', 'scale-[1.02]'); }
     } else if (filterType === 'macros') {
         if (cWeight) cWeight.className += " opacity-25 scale-95"; if (cCond) cCond.className += " opacity-25 scale-95";
-        if (cMacros) cMacros.className = cMacros.className.replace('border-slate-800', 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)] scale-[1.02]');
+        if (cMacros) { cMacros.classList.remove('border-slate-800'); cMacros.classList.add('border-emerald-500', 'shadow-[0_0_15px_rgba(16,185,129,0.2)]', 'scale-[1.02]'); }
     } else if (filterType === 'condition') {
         if (cWeight) cWeight.className += " opacity-25 scale-95"; if (cMacros) cMacros.className += " opacity-25 scale-95";
-        if (cCond) cCond.className = cCond.className.replace('border-slate-800', 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)] scale-[1.02]');
+        if (cCond) { cCond.classList.remove('border-slate-800'); cCond.classList.add('border-purple-500', 'shadow-[0_0_15px_rgba(168,85,247,0.2)]', 'scale-[1.02]'); }
     }
     const sortedDates = Object.keys(state.workouts).filter(d => state.workouts[d].weight > 0);
     sortedDates.forEach(dateStr => {
@@ -650,9 +649,6 @@ function updateKpiSnapshotCards() {
     document.getElementById('kpi-display-cond').innerText = `평균 수면: ${(sumSleep/len).toFixed(1)}h | 컨디션: ${(sumCond/len).toFixed(1)}점`; document.getElementById('kpi-display-bowel').innerText = `배변 빈도: ${Math.round((bowelO/len)*100)}%`;
 }
 
-// ==========================================
-// 6. [신규 추가] 엑셀(CSV) 백업 입출력 및 가상 자판 통제 가드
-// ==========================================
 export async function exportWeightRecordsToCSV() {
     const loader = document.getElementById('global-loading-layer'); if (loader) { loader.classList.remove('hidden'); loader.classList.add('flex'); }
     setTimeout(async () => {
@@ -714,15 +710,18 @@ function initWeightRecordModuleGards() {
             else menubar.classList.remove('sticky-menu-fixed');
         }
         
-        if (macroBar && (document.getElementById('tab-timeline').classList.contains('block') || 
-                         document.getElementById('tab-analysis').classList.contains('hidden') === false || 
-                         document.getElementById('tab-weight-record').classList.contains('block'))) {
-            if (window.scrollY > 350) {
-                macroBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
-                macroBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
-            } else {
-                macroBar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
-                macroBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+        // [보완 완료] 타임라인 데이터 리셋 동기화 중 발생할 수 있는 null 에러 예외 방어 가드 수립
+        if (macroBar && document.getElementById('tab-timeline') && document.getElementById('tab-analysis') && document.getElementById('tab-weight-record')) {
+            if (document.getElementById('tab-timeline').classList.contains('block') || 
+                document.getElementById('tab-analysis').classList.contains('hidden') === false || 
+                document.getElementById('tab-weight-record').classList.contains('block')) {
+                if (window.scrollY > 350) {
+                    macroBar.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+                    macroBar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+                } else {
+                    macroBar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
+                    macroBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+                }
             }
         }
     });
@@ -735,7 +734,6 @@ function initWeightRecordModuleGards() {
     }
 }
 
-// 7. 시스템 초기 부팅 시퀀스 레일 최종 가동
 initializeFirebase((success) => {
     const statusEl = document.getElementById('cloud-status');
     if(statusEl) statusEl.innerHTML = '<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10B981]"></span> LOCAL AUTOSAVE ACTIVE';
