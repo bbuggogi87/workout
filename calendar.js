@@ -4,7 +4,7 @@
  * 변경사항: 최하단 유령 중괄호 구문 오류 전면 제거 및 캘린더 내 체중 변경 시 체중 변화량(Δ) 연산 동기화 적용 완료
  */
 
-import { state } from './store.js';
+import { state, recalculateAllWeightDeltas } from './store.js';
 import { initializeFirebase, triggerSave, importDataJSON, saveToLocal } from './services.js';
 import { WORKOUT_DB, AVAILABLE_PLATES, BAR_WEIGHT, RECOMMENDED_ROUTINES } from './workoutConstants.js';
 
@@ -303,6 +303,13 @@ export function switchCalendarTab(tabId) {
     if (tabId === 'tab-home') updateHomeDashboardWidgets();
     if (tabId === 'tab-routine') renderPresetRoutineGrid();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateDdayBadge() {
+    const badge = document.getElementById('badge-dday');
+    if (!badge || !state.userInfo?.targetDate) return;
+    const diff = Math.ceil((new Date(state.userInfo.targetDate) - new Date()) / (1000 * 60 * 60 * 24));
+    badge.innerText = diff >= 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
 }
 
 function updateHomeDashboardWidgets() {
@@ -1022,6 +1029,8 @@ export function initCalendarModule() {
     renderCalendarGrid();
     if (document.getElementById('workout-list-container')) renderWorkoutList();
     loadSystemSettings();
+    updateHomeDashboardWidgets();
+    updateDdayBadge();
 }
 
 function initMetricsChangeEvents() {
@@ -1031,10 +1040,8 @@ function initMetricsChangeEvents() {
         state.workouts[dStr].bf = parseFloat(document.getElementById('input-daily-bf').value) || 0;
         state.workouts[dStr].smm = parseFloat(document.getElementById('input-daily-smm').value) || 0;
         
-        if (window.recalculateAllWeightDeltas) {
-            window.recalculateAllWeightDeltas();
-        }
-        
+        recalculateAllWeightDeltas();
+
         triggerSave(window.showToast); renderCalendarGrid();
     };
     const weightEl = document.getElementById('input-daily-weight');

@@ -49,3 +49,16 @@ export function applyCustomSuppsToDB() {
         }
     });
 }
+
+/**
+ * 날짜순 공복 체중 기록을 바탕으로 전일 대비 체중 변화량(weightDelta)을 전체 재계산하는 함수
+ * (app.js 와 calendar.js 양쪽에서 공유하는 순수 상태 연산이므로 SSOT 모듈에 위치시켜
+ *  캘린더 페이지에서 app.js 없이도 동일하게 호출할 수 있도록 함)
+ */
+export function recalculateAllWeightDeltas() {
+    const dates = Object.keys(state.workouts).filter(d => state.workouts[d].weight > 0).sort((a, b) => new Date(a) - new Date(b));
+    dates.forEach((dateStr, idx) => {
+        if (idx === 0) state.workouts[dateStr].weightDelta = 0.0;
+        else state.workouts[dateStr].weightDelta = state.workouts[dateStr].weight - state.workouts[dates[idx - 1]].weight;
+    });
+}

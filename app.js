@@ -4,7 +4,7 @@
  * 변경사항: 최하단 유령 중괄호 구문 오류 제거, 오리지널 index.html 탭 노드 아이디 완전 매핑 및 예외 방어 가드 절 구축 완료
  */
 
-import { state, applyCustomSuppsToDB } from './store.js';
+import { state, applyCustomSuppsToDB, recalculateAllWeightDeltas } from './store.js';
 import { initializeFirebase, triggerSave, exportDataJSON, importDataJSON, saveToLocal } from './services.js';
 
 // ==========================================
@@ -58,7 +58,6 @@ window.setMatrixFilter = setMatrixFilter;
 window.updateWeightTrendChart = updateWeightTrendChart;
 window.exportWeightRecordsToCSV = exportWeightRecordsToCSV;
 window.importWeightRecordsFromCSV = importWeightRecordsFromCSV;
-window.recalculateAllWeightDeltas = recalculateAllWeightDeltas;
 
 // [신규 추가] 하단 매크로 정보 바 닫기/하단고정 기능 전역 바인딩
 window.closeMacroBar = closeMacroBar;
@@ -269,7 +268,7 @@ export function loadPhase(phaseId) {
                 </div>
                 <div class="transition-all duration-300 overflow-hidden ${meal.isCollapsed ? 'max-h-0 opacity-0 m-0' : 'max-h-[3000px] opacity-100 mt-5'}">
                     <div class="flex items-center gap-2 mb-3 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60" onclick="event.stopPropagation()">
-                        <input type="checkbox" id="meal-workout-check-${mIdx}" ${workoutChecked} onchange="window.toggleMealWorkout(${mIdx}, event.target.checked)" class="w-4 h-4 accent-rose-500 공식 커서 픽커 쉐입">
+                        <input type="checkbox" id="meal-workout-check-${mIdx}" ${workoutChecked} onchange="window.toggleMealWorkout(${mIdx}, event.target.checked)" class="w-4 h-4 accent-rose-500">
                         <label for="meal-workout-check-${mIdx}" class="text-xs font-bold text-slate-400 cursor-pointer select-none">이 일정은 훈련 스케줄입니다 (활성화 시 당일 영양소 연산 대상에서 제외)</label>
                     </div>
                     <input type="text" onchange="window.updateMealField(${mIdx}, 'explain', event.target.value)" value="${meal.explain || ''}" placeholder="스케줄 메모 (예: 오후 메인 본 운동 세션)" class="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-3 text-sm sm:text-base text-white font-bold outline-none focus:border-sky-500 mb-3">
@@ -616,11 +615,6 @@ export function deleteWeightRecordData(dateStr) {
         if (t) { t.weight = 0; t.weightDelta = 0; t.visualScore = 0; t.restingHR = 0; t.sleepTime = 0; t.workoutPart = ''; t.anaerobic = 0; t.aerobic = 0; t.water = 0; t.bowel = 'X'; t.carbs = 0; t.protein = 0; t.fat = 0; t.totalKcal = 0; t.macroRatio = '0:0:0'; t.specialNote = ''; t.memo = ''; }
         recalculateAllWeightDeltas(); saveToLocal(); renderWeightRecordList(); setMatrixFilter(state.weightRecordFilter || 'all'); showToast("당일 지표 기록을 초기화했습니다.");
     }
-}
-
-export function recalculateAllWeightDeltas() {
-    const dates = Object.keys(state.workouts).filter(d => state.workouts[d].weight > 0).sort((a, b) => new Date(a) - new Date(b));
-    dates.forEach((dateStr, idx) => { if (idx === 0) state.workouts[dateStr].weightDelta = 0.0; else state.workouts[dateStr].weightDelta = state.workouts[dateStr].weight - state.workouts[dates[idx - 1]].weight; });
 }
 
 export function setMatrixFilter(filterType) {
